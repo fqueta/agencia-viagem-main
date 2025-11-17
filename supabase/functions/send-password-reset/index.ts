@@ -58,10 +58,11 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
     // Resolver base de redirecionamento
-    // Prioridade: AUTH_REDIRECT_BASE_URL (env) > Origin da requisição > domínio padrão
+    // Produção: sempre usar AUTH_REDIRECT_BASE_URL quando disponível.
+    // Se não estiver setado, cair para domínio fixo de produção.
+    // Não usamos mais o Origin do request para evitar links "localhost" em emails.
     const redirectBase =
       Deno.env.get("AUTH_REDIRECT_BASE_URL") ??
-      req.headers.get('origin') ??
       'https://viagens.ctloja.com.br';
 
     // Gerar token de recuperação de senha
