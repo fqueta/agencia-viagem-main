@@ -66,8 +66,23 @@ const handler = async (req: Request): Promise<Response> => {
       }
     });
 
+    // Tratar caso de usuário inexistente sem revelar informação (evita enumeração)
     if (error) {
       console.error("Erro ao gerar link de recuperação:", error);
+      // Supabase Auth retorna 404 com code "user_not_found" quando o email não existe.
+      // Por segurança, respondemos 200 e mensagem genérica.
+      if (error.status === 404 || error?.code === "user_not_found") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Se o email existir, enviaremos um link de recuperação."
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json", ...corsHeaders(req) },
+          }
+        );
+      }
       throw error;
     }
 
@@ -79,6 +94,8 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Link de recuperação gerado com sucesso");
 
     // Template de email em português com logo
+    // Nota: muitos clientes de email ignoram CSS em <style>. Para maior compatibilidade,
+    // aplicamos estilos INLINE no botão de ação para garantir visibilidade.
     const emailHtml = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -133,20 +150,7 @@ const handler = async (req: Request): Promise<Response> => {
       text-align: center;
       margin: 40px 0;
     }
-    .button {
-      display: inline-block;
-      background: linear-gradient(135deg, #3B82F6, #1E40AF);
-      color: #ffffff !important;
-      padding: 16px 48px;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 16px;
-      transition: transform 0.2s;
-    }
-    .button:hover {
-      transform: translateY(-2px);
-    }
+    /* Observação: o estilo de botão acima pode ser ignorado por alguns clientes. */
     .footer {
       color: #94a3b8;
       font-size: 14px;
@@ -183,9 +187,29 @@ const handler = async (req: Request): Promise<Response> => {
     </div>
     
     <div class="button-container">
-      <a href="${resetLink}" class="button" style="color: #ffffff !important; text-decoration: none;">
+      <a
+        href="${resetLink}"
+        style="
+          background-color:#3B82F6;
+          color:#ffffff !important;
+          text-decoration:none;
+          padding:16px 24px;
+          border-radius:8px;
+          display:inline-block;
+          font-weight:600;
+          font-size:16px;
+          line-height:1.2;
+          text-align:center;
+          mso-padding-alt:0;
+          border:0;
+        "
+      >
         Redefinir Senha
       </a>
+      <div style="margin-top:12px; text-align:center; font-size:12px; color:#6b7280;">
+        Se o botão não aparecer, copie e cole este link no navegador:<br/>
+        <span style="word-break:break-all; color:#3B82F6;">${resetLink}</span>
+      </div>
     </div>
     
     <div class="warning">

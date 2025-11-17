@@ -15,7 +15,9 @@ import { Resend } from "https://esm.sh/resend@4.0.0";
 export function getResend(): Resend {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) {
-    console.error("RESEND_API_KEY is not set in environment.");
+    // PT-BR: Falha explícita para permitir que a Edge Function capture e responda.
+    // EN: Explicit failure so the Edge Function can catch and respond.
+    throw new Error("RESEND_API_KEY não configurada nas Secrets/ambiente");
   }
   return new Resend(apiKey);
 }
