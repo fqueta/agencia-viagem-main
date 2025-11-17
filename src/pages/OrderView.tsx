@@ -17,6 +17,7 @@ import { ptBR } from "date-fns/locale";
 import { OrderDeleteDialog } from "@/components/orders/OrderDeleteDialog";
 import { useOrganization } from "@/hooks/useOrganization";
 import { PAYMENT_METHODS } from "@/lib/constants";
+import { useOrganizationRole } from "@/hooks/useOrganizationRole";
 
 interface OrderDetails {
   id: string;
@@ -57,6 +58,7 @@ const OrderView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { organizationId } = useOrganization();
+  const { isOrgAdmin } = useOrganizationRole();
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([]);
@@ -429,7 +431,7 @@ const OrderView = () => {
               <Edit className="h-4 w-4 mr-2" />
               Editar Pedido
             </Button>
-            {order && (
+            {order && isOrgAdmin && (
               <OrderDeleteDialog
                 orderId={order.id}
                 orderNumber={order.order_number}

@@ -15,6 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganizationRole } from "@/hooks/useOrganizationRole";
 
 interface OrderDeleteDialogProps {
   orderId: string;
@@ -45,6 +47,8 @@ export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps 
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { organizationId } = useOrganization();
+  const { isOrgAdmin } = useOrganizationRole();
 
   /**
    * handleDelete
@@ -52,16 +56,46 @@ export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps 
    * Executa a exclusão do pedido por `orderId`.
    * Usa `.select('id')` após `.delete()` para confirmar que ao menos um registro foi removido,
    * evitando falso positivo quando o filtro não encontra linhas (PostgREST retorna sucesso sem erro).
+   * Também valida permissões de admin na organização atual antes de executar a exclusão.
    */
   const handleDelete = async () => {
     setIsDeleting(true);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Sessão expirada",
+          description: "Faça login novamente para continuar.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!organizationId) {
+        toast({
+          title: "Organização não encontrada",
+          description: "Selecione uma organização ativa para excluir pedidos.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!isOrgAdmin) {
+        toast({
+          title: "Sem permissão",
+          description: "Você não tem permissão para excluir pedidos nesta organização.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Delete order (payments and installments will be deleted by CASCADE)
       const { error, data } = await supabase
         .from("orders")
         .delete()
         .eq("id", orderId)
+        .eq("organization_id", organizationId)
         .select("id");
 
       if (error) throw error;
@@ -115,16 +149,21 @@ export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps 
             <span className="block text-destructive font-medium mt-2">
               ⚠️ Todos os pagamentos e parcelas relacionados também serão excluídos.
             </span>
+            {!isOrgAdmin && (
+              <span className="block text-destructive font-medium mt-2">
+                Você não tem permissão para excluir pedidos nesta organização.
+              </span>
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
-            disabled={isDeleting}
+            disabled={isDeleting || !isOrgAdmin}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {isDeleting ? "Excluindo..." : "Excluir Pedido"}
+            {isDeleting ? "Excluindo..." : isOrgAdmin ? "Excluir Pedido" : "Sem permissão"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

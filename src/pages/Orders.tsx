@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganizationRole } from "@/hooks/useOrganizationRole";
 
 const Orders = () => {
   const navigate = useNavigate();
@@ -352,20 +353,22 @@ const Orders = () => {
                             <Edit className="h-4 w-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-                            <OrderDeleteDialog
-                              orderId={order.id}
-                              orderNumber={order.order_number}
-                              customerName={order.customers?.full_name || "N/A"}
-                              onSuccess={loadData}
-                              trigger={
-                                <span className="flex items-center text-destructive cursor-pointer w-full">
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Excluir
-                                </span>
-                              }
-                            />
-                          </DropdownMenuItem>
+                          {isOrgAdmin && (
+                            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                              <OrderDeleteDialog
+                                orderId={order.id}
+                                orderNumber={order.order_number}
+                                customerName={order.customers?.full_name || "N/A"}
+                                onSuccess={loadData}
+                                trigger={
+                                  <span className="flex items-center text-destructive cursor-pointer w-full">
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Excluir
+                                  </span>
+                                }
+                              />
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
