@@ -1,0 +1,14 @@
+# Enable mod_rewrite for single-page application routing
+# This ensures direct visits to routes (e.g., /auth, /reset-password)
+# return the SPA entry (index.html) instead of 404 on Apache servers.
+
+RewriteEngine On
+RewriteBase /
+
+# If the request is for an existing file or directory, serve it directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Otherwise, rewrite all other requests to index.html
+RewriteRule . /index.html [L]
