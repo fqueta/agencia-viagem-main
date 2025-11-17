@@ -13,6 +13,8 @@ function corsHeaders(req: Request) {
     "Access-Control-Allow-Headers":
       req.headers.get("access-control-request-headers") ??
       "authorization, x-client-info, apikey, content-type",
+    // Ajuda caches/proxies/CDNs a diferenciar respostas por origem e headers
+    "Vary": "Origin, Access-Control-Request-Headers, Access-Control-Request-Method",
     "Access-Control-Max-Age": "86400",
   } as Record<string, string>;
 }
@@ -30,7 +32,8 @@ interface PasswordResetRequest {
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders(req) });
+    // Responder preflight com corpo vazio e 204
+    return new Response(null, { status: 204, headers: corsHeaders(req) });
   }
 
   try {
