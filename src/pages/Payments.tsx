@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, DollarSign, CreditCard, Edit, AlertCircle } from "lucide-react";
+import { ArrowLeft, DollarSign, CreditCard, Edit, AlertCircle, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { SearchInput } from "@/components/filters/SearchInput";
@@ -28,6 +28,10 @@ const Payments = () => {
   const [isAddInstallmentOpen, setIsAddInstallmentOpen] = useState(false);
   const [isEditInstallmentOpen, setIsEditInstallmentOpen] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any>(null);
+  const [isEditPaymentDateOpen, setIsEditPaymentDateOpen] = useState(false);
+  const [paymentDateOnly, setPaymentDateOnly] = useState<string>("");
+  const [isEditDueDateOpen, setIsEditDueDateOpen] = useState(false);
+  const [dueDateOnly, setDueDateOnly] = useState<string>("");
   const [installmentCount, setInstallmentCount] = useState("1");
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
@@ -39,6 +43,48 @@ const Payments = () => {
     maxValue: "",
     paymentType: "all", // "all", "installments", "single"
   });
+
+  /**
+   * Debounce e utilitários de máscara BRL para edição inline.
+   * EN: Debounce and BRL currency mask utilities for inline editing.
+   */
+  const DEBOUNCE_MS = 600;
+  const amountDebounceRef = useRef<number | null>(null);
+  const dueDateDebounceRef = useRef<number | null>(null);
+
+  /**
+   * Formata um número para moeda brasileira (BRL) para exibição em inputs.
+   * EN: Formats a number as Brazilian currency (BRL) for input display.
+   */
+  const formatCurrencyBRL = (value: number): string => {
+    if (value === null || value === undefined || isNaN(value)) return "";
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  };
+
+  /**
+   * Aplica máscara de moeda ao texto digitado e retorna valor numérico em reais.
+   * EN: Applies currency mask to typed text and returns numeric value in BRL.
+   */
+  const parseMaskedCurrency = (raw: string): { display: string; value: number } => {
+    const digits = raw.replace(/\D/g, "");
+    const numeric = Number(digits) / 100; // cents to reais
+    const display = formatCurrencyBRL(numeric);
+    return { display, value: numeric };
+  };
+
+  /**
+   * Redistribui um valor total igualmente entre N parcelas com precisão de 2 casas.
+   * EN: Evenly distributes a total amount across N installments with 2-decimal precision.
+   * Garante que a soma final seja exatamente igual ao total, espalhando os centavos restantes.
+   */
+  const distributeEvenly = (total: number, n: number): number[] => {
+    if (n <= 0) return [];
+    const cents = Math.round(total * 100);
+    const base = Math.floor(cents / n);
+    const remainder = cents - base * n; // número de parcelas que recebem +0.01
+    const result: number[] = Array.from({ length: n }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100);
+    return result;
+  };
 
   useEffect(() => {
     if (organizationId) {
@@ -75,6 +121,145 @@ const Payments = () => {
       return;
     }
     setPayments(data || []);
+  };
+
+  /**
+   * Atualiza a parcela selecionada, permitindo editar status,
+   * data de pagamento, método de pagamento, notas e vencimento.
+   * EN: Unified handler to update selected installment fields.
+   */
+  const handleUpdateInstallment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInstallment) return;
+
+    const { error } = await supabase
+      .from("installments")
+      .update({
+        status: selectedInstallment.status,
+        payment_date: selectedInstallment.payment_date,
+        due_date: selectedInstallment.due_date,
+        payment_method: selectedInstallment.payment_method,
+        notes: selectedInstallment.notes,
+      })
+      .eq("id", selectedInstallment.id);
+
+    if (error) {
+      toast.error("Erro ao atualizar parcela");
+      return;
+    }
+
+    toast.success("Parcela atualizada!");
+    setIsEditInstallmentOpen(false);
+    if (selectedInstallment?.payment_id) {
+      loadInstallments(selectedInstallment.payment_id);
+    }
+  };
+
+  /**
+   * Atualiza o valor (amount) da parcela de forma inline com redistribuição.
+   * EN: Inline amount update with redistribution across open installments.
+   */
+  const handleInlineAmountChange = async (installmentId: string, paymentId: string, newAmount: number) => {
+    const paymentInstallments = installments[paymentId] || [];
+    const target = paymentInstallments.find((i) => i.id === installmentId);
+    if (target && target.status === "paid") return;
+    if (isNaN(newAmount)) return;
+    const rounded = Math.round(newAmount * 100) / 100;
+
+    const { error } = await supabase
+      .from("installments")
+      .update({ amount: rounded })
+      .eq("id", installmentId);
+
+    if (error) {
+      toast.error("Erro ao atualizar valor");
+      return;
+    }
+
+    const paymentObj = payments.find((p) => p.id === paymentId);
+    if (!paymentObj) return;
+
+    const paidSum = paymentInstallments
+      .filter((i) => i.status === "paid")
+      .reduce((sum, i) => sum + Number(i.amount), 0);
+
+    const openOthers = paymentInstallments.filter((i) => i.status !== "paid" && i.id !== installmentId);
+    const remainingRaw = Number(paymentObj.amount) - paidSum - rounded;
+    const remaining = Math.max(0, Math.round(remainingRaw * 100) / 100);
+
+    if (remainingRaw < 0) {
+      toast.error("Valor excede o total do pagamento. Demais parcelas ajustadas para 0.");
+    }
+
+    if (openOthers.length > 0) {
+      const distributed = distributeEvenly(remaining, openOthers.length);
+      const updates = openOthers.map((i, idx) => ({ id: i.id, amount: distributed[idx] }));
+      const results = await Promise.all(
+        updates.map((u) => supabase.from("installments").update({ amount: u.amount }).eq("id", u.id))
+      );
+      const updateError = results.find((r: any) => r.error)?.error;
+      if (updateError) {
+        toast.error("Erro ao redistribuir parcelas");
+      }
+
+      // Atualiza estado local apenas do grupo deste pagamento
+      setInstallments((prev) => {
+        const arr = prev[paymentId] || [];
+        const nextArr = arr.map((i) => {
+          if (i.id === installmentId) return { ...i, amount: rounded };
+          const found = updates.find((u) => u.id === i.id);
+          return found ? { ...i, amount: found.amount } : i;
+        });
+        return { ...prev, [paymentId]: nextArr };
+      });
+    } else {
+      setInstallments((prev) => {
+        const arr = prev[paymentId] || [];
+        const nextArr = arr.map((i) => (i.id === installmentId ? { ...i, amount: rounded } : i));
+        return { ...prev, [paymentId]: nextArr };
+      });
+    }
+  };
+
+  /**
+   * Atualiza o vencimento (due_date) de uma parcela de forma inline.
+   * EN: Inline due date update.
+   */
+  const handleInlineDueDateChange = async (installmentId: string, paymentId: string, newDate: string) => {
+    const paymentInstallments = installments[paymentId] || [];
+    const target = paymentInstallments.find((i) => i.id === installmentId);
+    if (target && target.status === "paid") return;
+    if (!newDate) return;
+
+    const { error } = await supabase
+      .from("installments")
+      .update({ due_date: newDate })
+      .eq("id", installmentId);
+
+    if (error) {
+      toast.error("Erro ao atualizar vencimento");
+      return;
+    }
+  };
+
+  /**
+   * Agenda atualização debounced do valor da parcela.
+   */
+  const queueAmountUpdate = (installmentId: string, paymentId: string, newAmount: number) => {
+    if (amountDebounceRef.current) clearTimeout(amountDebounceRef.current);
+    amountDebounceRef.current = window.setTimeout(() => {
+      handleInlineAmountChange(installmentId, paymentId, newAmount);
+    }, DEBOUNCE_MS);
+  };
+
+  /**
+   * Agenda atualização debounced do vencimento da parcela.
+   */
+  const queueDueDateUpdate = (installmentId: string, paymentId: string, newDate: string) => {
+    if (dueDateDebounceRef.current) clearTimeout(dueDateDebounceRef.current);
+    dueDateDebounceRef.current = window.setTimeout(() => {
+      handleInlineDueDateChange(installmentId, paymentId, newDate);
+    }, DEBOUNCE_MS);
   };
 
   const loadInstallments = async (paymentId: string) => {
@@ -133,27 +318,74 @@ const Payments = () => {
     loadPayments();
   };
 
-  const handleUpdateInstallment = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+  /**
+   * Atualiza dados da parcela, incluindo data de vencimento.
+   *
+   * PT-BR: Permite editar status, data de vencimento (due_date),
+   * data de pagamento, método de pagamento e observações.
+   * EN: Updates installment details including due date, payment date,
+   * payment method, and notes.
+   */
+  // Removido: handler baseado em FormData duplicado.
 
-    const { error } = await supabase
-      .from("installments")
-      .update({
-        status: formData.get("status") as "pending" | "paid" | "overdue" | "partial",
-        payment_date: (formData.get("payment_date") as string) || null,
-        payment_method: (formData.get("payment_method") as string) || null,
-        notes: (formData.get("notes") as string) || null,
-      })
-      .eq("id", selectedInstallment.id);
-
-    if (error) {
-      toast.error("Erro ao atualizar parcela");
+  /**
+   * Atualiza apenas a data de pagamento de uma parcela.
+   *
+   * PT-BR: Permite editar somente a data de pagamento sem alterar o status da parcela.
+   * EN: Allows editing only the payment date without changing the installment status.
+   */
+  const handleUpdatePaymentDateOnly = async () => {
+    if (!selectedInstallment) return;
+    // PT-BR: Bloqueia edição quando a parcela está marcada como "paga".
+    // EN: Prevent editing when installment status is "paid".
+    if (selectedInstallment.status === "paid") {
+      toast.warning("Esta parcela está paga e não pode ser editada.");
       return;
     }
 
-    toast.success("Parcela atualizada com sucesso");
-    setIsEditInstallmentOpen(false);
+    const { error } = await supabase
+      .from("installments")
+      .update({ payment_date: paymentDateOnly || null })
+      .eq("id", selectedInstallment.id);
+
+    if (error) {
+      toast.error("Erro ao atualizar data de pagamento");
+      return;
+    }
+
+    toast.success("Data de pagamento atualizada");
+    setIsEditPaymentDateOpen(false);
+    loadInstallments(selectedInstallment.payment_id);
+    loadPayments();
+  };
+
+  /**
+   * Atualiza apenas a data de vencimento de uma parcela.
+   *
+   * PT-BR: Permite editar somente o vencimento (due_date) sem alterar o status.
+   * EN: Updates only the due date without changing the installment status.
+   */
+  const handleUpdateDueDateOnly = async () => {
+    if (!selectedInstallment) return;
+    // PT-BR: Bloqueia edição quando a parcela está marcada como "paga".
+    // EN: Prevent editing when installment status is "paid".
+    if (selectedInstallment.status === "paid") {
+      toast.warning("Esta parcela está paga e não pode ser editada.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("installments")
+      .update({ due_date: dueDateOnly })
+      .eq("id", selectedInstallment.id);
+
+    if (error) {
+      toast.error("Erro ao atualizar vencimento");
+      return;
+    }
+
+    toast.success("Vencimento atualizado");
+    setIsEditDueDateOpen(false);
     loadInstallments(selectedInstallment.payment_id);
     loadPayments();
   };
@@ -460,7 +692,22 @@ const Payments = () => {
                             </div>
                           </TableCell>
                           <TableCell>
-                            R$ {Number(installment.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              className="w-40"
+                              value={formatCurrencyBRL(Number(installment.amount))}
+                              disabled={installment.status === "paid"}
+                              onChange={(e) => {
+                                const masked = parseMaskedCurrency(e.target.value);
+                                setInstallments((prev) => {
+                                  const arr = prev[payment.id] || [];
+                                  const nextArr = arr.map((i) => (i.id === installment.id ? { ...i, amount: masked.value } : i));
+                                  return { ...prev, [payment.id]: nextArr };
+                                });
+                                queueAmountUpdate(installment.id, payment.id, masked.value);
+                              }}
+                            />
                           </TableCell>
                           <TableCell>
                             {installment.payment_date
@@ -468,7 +715,22 @@ const Payments = () => {
                               : "-"}
                           </TableCell>
                           <TableCell>
-                            {new Date(installment.due_date).toLocaleDateString("pt-BR")}
+                            <Input
+                              type="date"
+                              className="w-40"
+                              value={installment.due_date || ""}
+                              disabled={installment.status === "paid"}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (!val) return;
+                                setInstallments((prev) => {
+                                  const arr = prev[payment.id] || [];
+                                  const nextArr = arr.map((i) => (i.id === installment.id ? { ...i, due_date: val } : i));
+                                  return { ...prev, [payment.id]: nextArr };
+                                });
+                                queueDueDateUpdate(installment.id, payment.id, val);
+                              }}
+                            />
                           </TableCell>
                           <TableCell>{getStatusBadge(installment.status)}</TableCell>
                           <TableCell>
@@ -480,7 +742,7 @@ const Payments = () => {
                               if (open) setSelectedInstallment(installment);
                             }}>
                               <DialogTrigger asChild>
-                                <Button variant="ghost" size="sm">
+                                <Button variant="ghost" size="sm" title="Editar parcela (status editável quando pago)">
                                   <Edit className="w-4 h-4" />
                                 </Button>
                               </DialogTrigger>
@@ -495,12 +757,17 @@ const Payments = () => {
                                   <div>
                                     <Label>Valor</Label>
                                     <p className="text-lg font-semibold">
-                                      R$ {Number(installment.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                      {formatCurrencyBRL(Number(selectedInstallment?.amount ?? installment.amount))}
                                     </p>
                                   </div>
                                   <div>
-                                    <Label htmlFor="status">Status</Label>
-                                    <Select name="status" defaultValue={installment.status}>
+                                    <Label>Status</Label>
+                                    <Select
+                                      value={selectedInstallment?.status ?? installment.status}
+                                      onValueChange={(value) =>
+                                        setSelectedInstallment({ ...selectedInstallment, status: value })
+                                      }
+                                    >
                                       <SelectTrigger>
                                         <SelectValue />
                                       </SelectTrigger>
@@ -512,16 +779,36 @@ const Payments = () => {
                                     </Select>
                                   </div>
                                   <div>
-                                    <Label htmlFor="payment_date">Data de Pagamento</Label>
+                                    <Label>Data de Vencimento</Label>
                                     <Input
                                       type="date"
-                                      name="payment_date"
-                                      defaultValue={installment.payment_date || ""}
+                                      value={(selectedInstallment?.due_date ?? installment.due_date) || ""}
+                                      onChange={(e) =>
+                                        setSelectedInstallment({ ...selectedInstallment, due_date: e.target.value })
+                                      }
+                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
                                     />
                                   </div>
                                   <div>
-                                    <Label htmlFor="payment_method">Método de Pagamento</Label>
-                                    <Select name="payment_method" defaultValue={installment.payment_method || ""}>
+                                    <Label>Data de Pagamento</Label>
+                                    <Input
+                                      type="date"
+                                      value={(selectedInstallment?.payment_date ?? installment.payment_date) || ""}
+                                      onChange={(e) =>
+                                        setSelectedInstallment({ ...selectedInstallment, payment_date: e.target.value })
+                                      }
+                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label>Método de Pagamento</Label>
+                                    <Select
+                                      value={(selectedInstallment?.payment_method ?? installment.payment_method) || ""}
+                                      onValueChange={(value) =>
+                                        setSelectedInstallment({ ...selectedInstallment, payment_method: value })
+                                      }
+                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
+                                    >
                                       <SelectTrigger>
                                         <SelectValue placeholder="Selecione o método" />
                                       </SelectTrigger>
@@ -535,17 +822,136 @@ const Payments = () => {
                                     </Select>
                                   </div>
                                   <div>
-                                    <Label htmlFor="notes">Observações</Label>
+                                    <Label>Observações</Label>
                                     <Input
-                                      name="notes"
                                       placeholder="Observações sobre o pagamento"
-                                      defaultValue={installment.notes || ""}
+                                      value={(selectedInstallment?.notes ?? installment.notes) || ""}
+                                      onChange={(e) =>
+                                        setSelectedInstallment({ ...selectedInstallment, notes: e.target.value })
+                                      }
+                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
                                     />
                                   </div>
                                   <div className="flex gap-2 justify-end">
                                     <Button type="button" variant="outline" onClick={() => setIsEditInstallmentOpen(false)}>
                                       Cancelar
                                     </Button>
+                                    <Button type="submit">Salvar</Button>
+                                  </div>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
+                            {/* Editar somente a data de pagamento */}
+                            <Dialog open={isEditPaymentDateOpen && selectedInstallment?.id === installment.id} onOpenChange={(open) => {
+                              setIsEditPaymentDateOpen(open);
+                              if (open) {
+                                setSelectedInstallment(installment);
+                                setPaymentDateOnly(installment.payment_date || "");
+                              }
+                            }}>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" title="Editar data de pagamento">
+                                  <CalendarDays className="w-4 h-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Editar Data de Pagamento</DialogTitle>
+                                  <DialogDescription>
+                                    Atualize somente a data, sem marcar como pago.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <form onSubmit={handleUpdateInstallment} className="space-y-4">
+                                  <div>
+                                    <Label>Status</Label>
+                                    <Select
+                                      value={selectedInstallment?.status ?? installment.status}
+                                      onValueChange={(value) =>
+                                        setSelectedInstallment({ ...selectedInstallment, status: value })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="pending">Pendente</SelectItem>
+                                        <SelectItem value="paid">Pago</SelectItem>
+                                        <SelectItem value="overdue">Atrasado</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <Label>Data de Pagamento</Label>
+                                    <Input
+                                      type="date"
+                                      value={paymentDateOnly}
+                                      onChange={(e) => {
+                                        setPaymentDateOnly(e.target.value);
+                                        setSelectedInstallment({ ...selectedInstallment, payment_date: e.target.value });
+                                      }}
+                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
+                                    />
+                                  </div>
+                                  <div className="flex justify-end gap-2">
+                                    <Button type="button" variant="outline" onClick={() => setIsEditPaymentDateOpen(false)}>Cancelar</Button>
+                                    <Button type="submit">Salvar</Button>
+                                  </div>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
+                            {/* Editar somente a data de vencimento */}
+                            <Dialog open={isEditDueDateOpen && selectedInstallment?.id === installment.id} onOpenChange={(open) => {
+                              setIsEditDueDateOpen(open);
+                              if (open) {
+                                setSelectedInstallment(installment);
+                                setDueDateOnly(installment.due_date || "");
+                              }
+                            }}>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" title="Editar vencimento">
+                                  <CalendarDays className="w-4 h-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Editar Vencimento</DialogTitle>
+                                  <DialogDescription>
+                                    Atualize somente o vencimento da parcela.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <form onSubmit={handleUpdateInstallment} className="space-y-4">
+                                  <div>
+                                    <Label>Status</Label>
+                                    <Select
+                                      value={selectedInstallment?.status ?? installment.status}
+                                      onValueChange={(value) =>
+                                        setSelectedInstallment({ ...selectedInstallment, status: value })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="pending">Pendente</SelectItem>
+                                        <SelectItem value="paid">Pago</SelectItem>
+                                        <SelectItem value="overdue">Atrasado</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <Label>Data de Vencimento</Label>
+                                    <Input
+                                      type="date"
+                                      value={dueDateOnly}
+                                      onChange={(e) => {
+                                        setDueDateOnly(e.target.value);
+                                        setSelectedInstallment({ ...selectedInstallment, due_date: e.target.value });
+                                      }}
+                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
+                                    />
+                                  </div>
+                                  <div className="flex justify-end gap-2">
+                                    <Button type="button" variant="outline" onClick={() => setIsEditDueDateOpen(false)}>Cancelar</Button>
                                     <Button type="submit">Salvar</Button>
                                   </div>
                                 </form>

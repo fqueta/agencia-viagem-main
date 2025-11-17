@@ -33,12 +33,10 @@ const Auth = () => {
   /**
    * handleForgotPassword
    *
-   * PT-BR: Envia email de recuperação usando o método nativo do Supabase
-   * (resetPasswordForEmail), com redirect configurado via env. Mantém
-   * validação de email e feedback de UI.
-   * EN: Sends a password recovery email using Supabase's native method
-   * (resetPasswordForEmail), with redirect configured via env. Keeps
-   * email validation and UI feedback.
+   * PT-BR: Envia email de recuperação via Edge Function `send-password-reset`
+   * usando Resend, garantindo consistência com o sistema de emails.
+   * EN: Sends a password recovery email via the `send-password-reset`
+   * Edge Function using Resend, keeping email handling consistent.
    */
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,10 +50,10 @@ const Auth = () => {
         return;
       }
 
-      // Fallback nativo: usa Supabase Auth para enviar email de recuperação
-      // Redirect configurado via VITE_AUTH_REDIRECT_URL
-      const redirectTo = `${import.meta.env.VITE_AUTH_REDIRECT_URL}/reset-password`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      // Envia email de recuperação via função edge (Resend)
+      const { error } = await supabase.functions.invoke("send-password-reset", {
+        body: { email },
+      });
       if (error) throw error;
 
       toast.success("Email de recuperação enviado! Verifique sua caixa de entrada.");

@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, User, Trash2, Plus } from "lucide-react";
+import { ArrowLeft, User, Trash2, Plus, Eye, EyeOff } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -61,6 +61,11 @@ export default function UserEdit() {
   const [availableOrgs, setAvailableOrgs] = useState<{id: string, name: string}[]>([]);
   const [selectedOrgToAdd, setSelectedOrgToAdd] = useState<string>("");
   const [selectedOrgRole, setSelectedOrgRole] = useState<OrgRole>("agent");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
   const form = useForm<UserUpdateData>({
     resolver: zodResolver(userUpdateSchema),
@@ -321,6 +326,52 @@ export default function UserEdit() {
     }
   };
 
+  /**
+   * Atualiza a senha do usuário via Edge Function admin.
+   *
+   * EN: Updates the user password using the secured admin Edge Function.
+   */
+  const handleUpdatePassword = async () => {
+    if (!user) return;
+
+    // Basic client-side validation
+    if (!newPassword || !confirmPassword) {
+      toast.error("Informe e confirme a nova senha");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("As senhas não coincidem");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("A senha deve ter ao menos 8 caracteres");
+      return;
+    }
+
+    setUpdatingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("update-password", {
+        body: {
+          user_id: user.id,
+          new_password: newPassword,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        toast.success("Senha atualizada com sucesso!");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        toast.error(data?.error || "Não foi possível atualizar a senha");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao atualizar senha");
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
   if (loading || !user) {
     return <div className="p-8">Carregando...</div>;
   }
@@ -502,6 +553,70 @@ export default function UserEdit() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <Separator className="my-6" />
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold">Senha</h3>
+                <p className="text-sm text-muted-foreground">
+                  Atualize a senha do usuário. Requer perfil administrador.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nova Senha *</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Mínimo 8 caracteres"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Confirmar Senha *</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Repita a nova senha"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      aria-label={showConfirmPassword ? "Ocultar confirmação" : "Mostrar confirmação"}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  A senha deve conter letras, números e símbolo.
+                </p>
+                <Button type="button" onClick={handleUpdatePassword} disabled={updatingPassword}>
+                  {updatingPassword ? "Atualizando..." : "Atualizar Senha"}
+                </Button>
+              </div>
             </div>
 
             <div className="flex gap-4 pt-4">

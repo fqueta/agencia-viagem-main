@@ -1,8 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.76.1";
-import { Resend } from "https://esm.sh/resend@4.0.0";
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+import { sendEmail } from "../_shared/resend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -199,10 +197,9 @@ const handler = async (req: Request): Promise<Response> => {
 </html>
     `;
 
-    // Enviar email via Resend
-    const emailResponse = await resend.emails.send({
-      from: "Agência de Viagem <nao_responda@maisaqui.com.br>",
-      to: [email],
+    // Enviar email via Resend (helper compartilhado)
+    const emailResponse = await sendEmail({
+      to: email,
       subject: "Recuperação de Senha - Agência de Viagem",
       html: emailHtml,
     });

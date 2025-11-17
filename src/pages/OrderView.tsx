@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Edit, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, Plus, Trash2, CalendarDays } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { OrderDeleteDialog } from "@/components/orders/OrderDeleteDialog";
@@ -64,6 +64,45 @@ const OrderView = () => {
   const [editInstallmentOpen, setEditInstallmentOpen] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<Installment | null>(null);
   const [installmentCount, setInstallmentCount] = useState(2);
+  const [isEditDueDateOpen, setIsEditDueDateOpen] = useState(false);
+  const [dueDateOnly, setDueDateOnly] = useState<string>("");
+  const DEBOUNCE_MS = 600;
+  const amountDebounceRef = useRef<number | null>(null);
+  const dueDateDebounceRef = useRef<number | null>(null);
+
+  /**
+   * Formata um número para moeda brasileira (BRL) para exibição em inputs.
+   * EN: Formats a number as Brazilian currency (BRL) for input display.
+   */
+  const formatCurrencyBRL = (value: number): string => {
+    if (value === null || value === undefined || isNaN(value)) return "";
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  };
+
+  /**
+   * Aplica máscara de moeda ao texto digitado e retorna valor numérico em reais.
+   * EN: Applies currency mask to typed text and returns numeric value in BRL.
+   */
+  const parseMaskedCurrency = (raw: string): { display: string; value: number } => {
+    const digits = raw.replace(/\D/g, "");
+    const numeric = Number(digits) / 100; // cents to reais
+    const display = formatCurrencyBRL(numeric);
+    return { display, value: numeric };
+  };
+
+  /**
+   * Redistribui um valor total igualmente entre N parcelas com precisão de 2 casas.
+   * EN: Evenly distributes a total amount across N installments with 2-decimal precision.
+   * Garante que a soma final seja exatamente igual ao total, espalhando os centavos restantes.
+   */
+  const distributeEvenly = (total: number, n: number): number[] => {
+    if (n <= 0) return [];
+    const cents = Math.round(total * 100);
+    const base = Math.floor(cents / n);
+    const remainder = cents - base * n; // número de parcelas que recebem +0.01
+    const result: number[] = Array.from({ length: n }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100);
+    return result;
+  };
 
   useEffect(() => {
     loadOrderData();
@@ -164,6 +203,11 @@ const OrderView = () => {
     }
   };
 
+  /**
+   * Atualiza a parcela selecionada, permitindo editar status,
+   * data de pagamento, método de pagamento, notas e agora também
+   * a data de vencimento (due_date).
+   */
   const handleUpdateInstallment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInstallment) return;
@@ -173,6 +217,7 @@ const OrderView = () => {
       .update({
         status: selectedInstallment.status as "pending" | "paid" | "overdue" | "partial",
         payment_date: selectedInstallment.payment_date,
+        due_date: selectedInstallment.due_date,
         payment_method: selectedInstallment.payment_method,
         notes: selectedInstallment.notes,
       })
@@ -189,6 +234,149 @@ const OrderView = () => {
       setEditInstallmentOpen(false);
       if (payment) loadInstallments(payment.id);
     }
+  };
+
+  /**
+   * Atualiza apenas o campo de vencimento (due_date) da parcela selecionada.
+   * Não altera status, payment_date, método ou notas.
+   */
+  const handleUpdateDueDateOnly = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInstallment) return;
+
+    const { error } = await supabase
+      .from("installments")
+      .update({ due_date: dueDateOnly })
+      .eq("id", selectedInstallment.id);
+
+    if (error) {
+      toast({
+        title: "Erro ao atualizar vencimento",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: "Vencimento atualizado!" });
+      setIsEditDueDateOpen(false);
+      if (payment) loadInstallments(payment.id);
+    }
+  };
+
+  /**
+   * Atualiza o valor (amount) de uma parcela de forma inline.
+   * Recebe o id da parcela e o novo valor numérico.
+   */
+  const handleInlineAmountChange = async (installmentId: string, newAmount: number) => {
+    // Bloqueia edição para parcelas pagas e garante número válido com duas casas
+    const target = installments.find((i) => i.id === installmentId);
+    if (target && target.status === "paid") return;
+    if (isNaN(newAmount)) return;
+    const rounded = Math.round(newAmount * 100) / 100;
+
+    const { error } = await supabase
+      .from("installments")
+      .update({ amount: rounded })
+      .eq("id", installmentId);
+
+    if (error) {
+      toast({ title: "Erro ao atualizar valor", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    // PT-BR: Após editar o valor de uma parcela, redistribui o restante
+    // entre as parcelas em aberto (status diferente de 'paid') para refletir o
+    // restante não quitado do pagamento principal.
+    // EN: After editing one installment, redistribute the remaining unpaid
+    // amount across other open installments (status not 'paid').
+    if (!payment) return;
+
+    const paidSum = installments
+      .filter((i) => i.status === "paid")
+      .reduce((sum, i) => sum + Number(i.amount), 0);
+
+    const openOthers = installments.filter((i) => i.status !== "paid" && i.id !== installmentId);
+    const remainingRaw = Number(payment.amount) - paidSum - rounded;
+    const remaining = Math.max(0, Math.round(remainingRaw * 100) / 100);
+
+    if (remainingRaw < 0) {
+      toast({
+        title: "Valor excede o total do pagamento",
+        description: "O restante foi ajustado para 0 nas demais parcelas.",
+        variant: "destructive",
+      });
+    }
+
+    if (openOthers.length > 0) {
+      const distributed = distributeEvenly(remaining, openOthers.length);
+
+      // Atualiza em lote no banco (um update por parcela)
+      const updates = openOthers.map((i, idx) => ({ id: i.id, amount: distributed[idx] }));
+      const results = await Promise.all(
+        updates.map((u) => supabase.from("installments").update({ amount: u.amount }).eq("id", u.id))
+      );
+      const updateError = results.find((r: any) => r.error)?.error;
+      if (updateError) {
+        toast({ title: "Erro ao redistribuir parcelas", description: updateError.message, variant: "destructive" });
+      }
+
+      // Atualiza estado local para refletir os novos valores imediatamente
+      setInstallments((prev) =>
+        prev.map((i) => {
+          if (i.id === installmentId) {
+            return { ...i, amount: rounded };
+          }
+          const found = updates.find((u) => u.id === i.id);
+          return found ? { ...i, amount: found.amount } : i;
+        })
+      );
+    } else {
+      // Nenhuma outra parcela em aberto; apenas confirma o valor editado localmente
+      setInstallments((prev) => prev.map((i) => (i.id === installmentId ? { ...i, amount: rounded } : i)));
+    }
+  };
+
+  /**
+   * Atualiza o vencimento (due_date) de uma parcela de forma inline.
+   * Recebe o id da parcela e a nova data no formato YYYY-MM-DD.
+   */
+  const handleInlineDueDateChange = async (installmentId: string, newDate: string) => {
+    const target = installments.find((i) => i.id === installmentId);
+    if (target && target.status === "paid") return;
+    if (!newDate) return;
+
+    const { error } = await supabase
+      .from("installments")
+      .update({ due_date: newDate })
+      .eq("id", installmentId);
+
+    if (error) {
+      toast({ title: "Erro ao atualizar vencimento", description: error.message, variant: "destructive" });
+      return;
+    }
+  };
+
+  /**
+   * Agenda atualização debounced do valor da parcela, evitando múltiplas escritas.
+   */
+  const queueAmountUpdate = (installmentId: string, newAmount: number) => {
+    if (amountDebounceRef.current) {
+      clearTimeout(amountDebounceRef.current);
+    }
+    amountDebounceRef.current = window.setTimeout(() => {
+      handleInlineAmountChange(installmentId, newAmount);
+    }, DEBOUNCE_MS);
+  };
+
+  /**
+   * Agenda atualização debounced do vencimento da parcela.
+   */
+  const queueDueDateUpdate = (installmentId: string, newDate: string) => {
+    if (dueDateDebounceRef.current) {
+      clearTimeout(dueDateDebounceRef.current);
+    }
+    dueDateDebounceRef.current = window.setTimeout(() => {
+      handleInlineDueDateChange(installmentId, newDate);
+    }, DEBOUNCE_MS);
   };
 
   const getStatusBadge = (status: string) => {
@@ -382,8 +570,36 @@ const OrderView = () => {
                         {installments.map((inst) => (
                           <TableRow key={inst.id}>
                             <TableCell>{inst.installment_number}/{inst.total_installments}</TableCell>
-                            <TableCell>R$ {inst.amount.toFixed(2)}</TableCell>
-                            <TableCell>{format(new Date(inst.due_date), "dd/MM/yyyy")}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="text"
+                                inputMode="numeric"
+                                className="w-40"
+                                value={formatCurrencyBRL(inst.amount)}
+                                disabled={inst.status === "paid"}
+                                onChange={(e) => {
+                                  const masked = parseMaskedCurrency(e.target.value);
+                                  // Atualiza localmente valor numérico; exibição é controlada por formatCurrencyBRL
+                                  setInstallments((prev) => prev.map((i) => (i.id === inst.id ? { ...i, amount: masked.value } : i)));
+                                  // Agenda gravação debounced já com número em BRL
+                                  queueAmountUpdate(inst.id, masked.value);
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="date"
+                                className="w-40"
+                                value={inst.due_date || ""}
+                                disabled={inst.status === "paid"}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (!val) return;
+                                  setInstallments((prev) => prev.map((i) => (i.id === inst.id ? { ...i, due_date: val } : i)));
+                                  queueDueDateUpdate(inst.id, val);
+                                }}
+                              />
+                            </TableCell>
                             <TableCell>{getStatusBadge(inst.status)}</TableCell>
                             <TableCell>
                               <Button
@@ -395,6 +611,17 @@ const OrderView = () => {
                                 }}
                               >
                                 <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedInstallment(inst);
+                                  setDueDateOnly(inst.due_date);
+                                  setIsEditDueDateOpen(true);
+                                }}
+                              >
+                                <CalendarDays className="h-4 w-4" />
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -437,6 +664,17 @@ const OrderView = () => {
                 </Select>
               </div>
               <div>
+                <Label>Vencimento</Label>
+                <Input
+                  type="date"
+                  value={selectedInstallment.due_date || ""}
+                  onChange={(e) =>
+                    setSelectedInstallment({ ...selectedInstallment, due_date: e.target.value })
+                  }
+                  disabled={selectedInstallment.status === "paid"}
+                />
+              </div>
+              <div>
                 <Label>Data de Pagamento</Label>
                 <Input
                   type="date"
@@ -444,6 +682,7 @@ const OrderView = () => {
                   onChange={(e) =>
                     setSelectedInstallment({ ...selectedInstallment, payment_date: e.target.value })
                   }
+                  disabled={selectedInstallment.status === "paid"}
                 />
               </div>
               <div>
@@ -453,6 +692,7 @@ const OrderView = () => {
                   onValueChange={(value) =>
                     setSelectedInstallment({ ...selectedInstallment, payment_method: value })
                   }
+                  disabled={selectedInstallment.status === "paid"}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o método" />
@@ -473,11 +713,48 @@ const OrderView = () => {
                   onChange={(e) =>
                     setSelectedInstallment({ ...selectedInstallment, notes: e.target.value })
                   }
+                  disabled={selectedInstallment.status === "paid"}
                 />
               </div>
               <Button type="submit" className="w-full">
                 Salvar
               </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditDueDateOpen} onOpenChange={setIsEditDueDateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Vencimento</DialogTitle>
+          </DialogHeader>
+          {selectedInstallment && (
+            <form onSubmit={handleUpdateInstallment} className="space-y-4">
+              <div>
+                <Label>Status</Label>
+                <Select name="status" defaultValue={selectedInstallment.status}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="paid">Pago</SelectItem>
+                    <SelectItem value="overdue">Atrasado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Vencimento</Label>
+                <Input
+                  type="date"
+                  name="due_date"
+                  value={dueDateOnly}
+                  onChange={(e) => setDueDateOnly(e.target.value)}
+                  disabled={selectedInstallment.status === "paid"}
+                />
+              </div>
+              <Button type="submit" className="w-full">Salvar</Button>
             </form>
           )}
         </DialogContent>
