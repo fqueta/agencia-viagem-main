@@ -65,9 +65,21 @@ interface Invite {
   expires_at: string;
 }
 
+/**
+ * OrganizationSettings
+ *
+ * PT-BR: Página de configurações da organização. Ajusta renderização
+ * para não ficar em carregamento infinito quando a organização não
+ * existir (ex.: usuário sem organização ativa). Usa `orgLoading` do
+ * hook `useOrganization` para controlar o estado de carregamento e
+ * exibe um estado vazio com ação para criar organização.
+ * EN: Organization settings page. Prevents infinite loading when the
+ * organization does not exist. Uses `orgLoading` from `useOrganization`
+ * to control loading and shows an empty state with a CTA to create one.
+ */
 export default function OrganizationSettings() {
   const navigate = useNavigate();
-  const { organizationId } = useOrganization();
+  const { organizationId, loading: orgLoading } = useOrganization();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -86,6 +98,12 @@ export default function OrganizationSettings() {
     }
   }, [organizationId]);
 
+  /**
+   * Carrega dados da organização atual.
+   *
+   * Usa `.maybeSingle()` para evitar erro 406 quando
+   * não há exatamente um registro (zero ou múltiplos).
+   */
   const loadOrganization = async () => {
     if (!organizationId) return;
 
@@ -93,10 +111,15 @@ export default function OrganizationSettings() {
       .from("organizations")
       .select("*")
       .eq("id", organizationId)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (error) {
       toast.error("Erro ao carregar organização");
+      return;
+    }
+    if (!data) {
+      toast.error("Organização não encontrada");
       return;
     }
     setOrganization(data);
@@ -135,6 +158,12 @@ export default function OrganizationSettings() {
     setInvites(data as Invite[]);
   };
 
+  /**
+   * Carrega a role do usuário na organização atual.
+   *
+   * Usa `.maybeSingle()` para evitar 406 caso o usuário
+   * não tenha associação ativa na organização.
+   */
   const loadUserRole = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !organizationId) return;
@@ -144,7 +173,8 @@ export default function OrganizationSettings() {
       .select("role")
       .eq("organization_id", organizationId)
       .eq("user_id", user.id)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (data) {
       setUserRole(data.role);
@@ -253,8 +283,29 @@ export default function OrganizationSettings() {
 
   const isAdmin = userRole === "owner" || userRole === "admin";
 
-  if (!organization) {
+  // Estado de carregamento baseado no hook
+  if (orgLoading) {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
+  }
+
+  // Estado vazio quando não há organização disponível
+  if (!organization) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="max-w-lg w-full">
+          <CardHeader>
+            <CardTitle>Organização não encontrada</CardTitle>
+            <CardDescription>
+              Não encontramos uma organização ativa para o seu usuário.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between gap-4">
+            <Button variant="outline" onClick={() => navigate('/dashboard')}>Voltar ao Dashboard</Button>
+            <Button onClick={() => navigate('/organization/create')}>Criar Organização</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

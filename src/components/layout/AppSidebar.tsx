@@ -13,6 +13,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSystemAdmin } from "@/hooks/useSystemAdmin";
+import { useOrganizationRole } from "@/hooks/useOrganizationRole";
 import { AdminBadge } from "@/components/admin/AdminBadge";
 
 const mainItems = [
@@ -38,10 +39,18 @@ const adminItems = [
   { title: "Organizações", url: "/admin/organizations", icon: Building2 },
 ];
 
+/**
+ * AppSidebar
+ * PT-BR: Sidebar da aplicação. Oculta o item "Organização" para
+ * usuários que não sejam owner/admin da organização atual.
+ * EN: Application sidebar. Hides "Organização" menu item for users
+ * who are not owner/admin of the current organization.
+ */
 export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
   const { isSystemAdmin } = useSystemAdmin();
+  const { isOrgAdmin } = useOrganizationRole();
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -100,7 +109,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Configurações</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsItems.map((item) => (
+              {(isOrgAdmin ? settingsItems : settingsItems.filter(i => i.title !== "Organização")).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)}>
                     <NavLink to={item.url}>
