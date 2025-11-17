@@ -2,11 +2,18 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.76.1";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+/**
+ * CORS helper: ecoa os headers do preflight para suportar ambientes locais
+ * e produção com origens diferentes.
+ */
+function corsHeaders(req: Request) {
+  return {
+    'Access-Control-Allow-Origin': req.headers.get('origin') ?? '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': req.headers.get('access-control-request-headers') ?? 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Max-Age': '86400',
+  } as Record<string, string>;
+}
 
 interface CreateUserRequest {
   email: string;
@@ -28,7 +35,7 @@ interface CreateUserRequest {
  */
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders(req) });
   }
 
   try {
@@ -42,7 +49,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: 'Não autorizado' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -52,7 +59,7 @@ serve(async (req) => {
     if (authError || !caller) {
       return new Response(
         JSON.stringify({ error: 'Não autorizado' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -67,7 +74,7 @@ serve(async (req) => {
     if (roleError || !roleData) {
       return new Response(
         JSON.stringify({ error: 'Acesso negado. Apenas administradores do sistema podem criar usuários.' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 403, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -77,7 +84,7 @@ serve(async (req) => {
     if (!email || !full_name || !role || !organization_id || !org_role) {
       return new Response(
         JSON.stringify({ error: 'Email, nome completo, role, organização e papel na organização são obrigatórios' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -91,7 +98,7 @@ serve(async (req) => {
       if (!valid) {
         return new Response(
           JSON.stringify({ error: 'Senha inicial inválida. Exige 8-72 caracteres com maiúscula, minúscula e número.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
       tempPassword = initial_password;
@@ -109,7 +116,7 @@ serve(async (req) => {
     if (orgError || !orgData) {
       return new Response(
         JSON.stringify({ error: 'Organização não encontrada' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -128,7 +135,7 @@ serve(async (req) => {
       console.error('Error creating user:', createError);
       return new Response(
         JSON.stringify({ error: 'Erro ao criar usuário' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -159,7 +166,7 @@ serve(async (req) => {
       await supabase.auth.admin.deleteUser(newUser.user.id);
       return new Response(
         JSON.stringify({ error: 'Erro ao atribuir role ao usuário' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -183,7 +190,7 @@ serve(async (req) => {
       await supabase.auth.admin.deleteUser(newUser.user.id);
       return new Response(
         JSON.stringify({ error: 'Erro ao vincular usuário à organização' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -212,14 +219,14 @@ serve(async (req) => {
         },
         temporary_password: tempPassword
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('Unexpected error:', error);
     return new Response(
       JSON.stringify({ error: 'Erro interno do servidor' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
     );
   }
 });

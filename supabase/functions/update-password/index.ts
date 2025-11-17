@@ -40,7 +40,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -49,7 +49,7 @@ serve(async (req: Request): Promise<Response> => {
     if (authError || !caller) {
       return new Response(
         JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -64,7 +64,7 @@ serve(async (req: Request): Promise<Response> => {
     if (roleError || !roleData) {
       return new Response(
         JSON.stringify({ error: "Acesso negado. Apenas administradores do sistema podem atualizar senhas." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -73,7 +73,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!user_id || !new_password) {
       return new Response(
         JSON.stringify({ error: "Campos obrigatórios: user_id, new_password" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -86,7 +86,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!(meetsLength && hasNumber && hasLetter && hasSpecial)) {
       return new Response(
         JSON.stringify({ error: "Senha fraca. Use ao menos 8 caracteres, com letras, números e símbolo." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -100,19 +100,19 @@ serve(async (req: Request): Promise<Response> => {
       console.error("Erro ao atualizar senha:", updateError);
       return new Response(
         JSON.stringify({ error: "Erro ao atualizar senha" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
       JSON.stringify({ success: true, message: "Senha atualizada com sucesso", user_id: updatedUser?.id ?? user_id }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Unexpected error:", error);
     return new Response(
       JSON.stringify({ error: "Erro interno do servidor" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });

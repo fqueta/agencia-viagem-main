@@ -2,11 +2,20 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.76.1";
 import { sendEmail } from "../_shared/resend.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+/**
+ * CORS helper: ecoa os headers do preflight para suportar ambientes locais
+ * e produção com origens diferentes.
+ */
+function corsHeaders(req: Request) {
+  return {
+    "Access-Control-Allow-Origin": req.headers.get("origin") ?? "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      req.headers.get("access-control-request-headers") ??
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Max-Age": "86400",
+  } as Record<string, string>;
+}
 
 interface SendInviteRequest {
   organization_id: string;
@@ -26,7 +35,7 @@ interface SendInviteRequest {
 serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -39,7 +48,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
       );
     }
 
@@ -48,7 +57,7 @@ serve(async (req: Request): Promise<Response> => {
     if (authError || !caller) {
       return new Response(
         JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
       );
     }
 
@@ -56,7 +65,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!organization_id || !email || !role) {
       return new Response(
         JSON.stringify({ error: "organization_id, email e role são obrigatórios" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
       );
     }
 
@@ -72,7 +81,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!membership) {
       return new Response(
         JSON.stringify({ error: "Acesso negado. Apenas admin/owner podem convidar." }),
-        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
       );
     }
 
@@ -104,7 +113,7 @@ serve(async (req: Request): Promise<Response> => {
       } else {
         return new Response(
           JSON.stringify({ error: "Erro ao criar convite" }),
-          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
         );
       }
     }
@@ -112,7 +121,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!invite) {
       return new Response(
         JSON.stringify({ error: "Convite não encontrado ou expirado" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
       );
     }
 
@@ -190,13 +199,13 @@ serve(async (req: Request): Promise<Response> => {
 
     return new Response(
       JSON.stringify({ success: true, invite_id: invite.id, expires_at: invite.expires_at }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
     );
   } catch (error: any) {
     console.error("Erro ao enviar convite:", error);
     return new Response(
       JSON.stringify({ error: "Erro ao enviar convite", details: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
     );
   }
 });
