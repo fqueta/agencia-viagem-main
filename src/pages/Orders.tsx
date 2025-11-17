@@ -352,7 +352,7 @@ const Orders = () => {
                             <Edit className="h-4 w-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
+                          <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
                             <OrderDeleteDialog
                               orderId={order.id}
                               orderNumber={order.order_number}

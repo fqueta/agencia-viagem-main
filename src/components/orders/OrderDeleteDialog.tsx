@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, forwardRef, isValidElement } from "react";
 import { useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import {
@@ -21,31 +21,53 @@ interface OrderDeleteDialogProps {
   orderNumber: string;
   customerName: string;
   onSuccess?: () => void;
+  // Trigger render element; must accept ref for Radix asChild composition
+  // If not provided, a default Button will be used.
   trigger?: React.ReactNode;
 }
 
-export function OrderDeleteDialog({
+/**
+ * Componente: OrderDeleteDialog
+ *
+ * Exibe um diálogo de confirmação para exclusão de pedidos.
+ * Compatível com Radix `asChild` por meio de React.forwardRef:
+ * - Encaminha `ref` e quaisquer props recebidas para o elemento de `trigger`.
+ * - Quando `trigger` não é fornecido, utiliza um `Button` padrão que aceita `ref`.
+ */
+export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps & React.HTMLAttributes<HTMLElement>>(({ 
   orderId,
   orderNumber,
   customerName,
   onSuccess,
   trigger,
-}: OrderDeleteDialogProps) {
+  ...triggerProps
+}, ref) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  /**
+   * handleDelete
+   *
+   * Executa a exclusão do pedido por `orderId`.
+   * Usa `.select('id')` após `.delete()` para confirmar que ao menos um registro foi removido,
+   * evitando falso positivo quando o filtro não encontra linhas (PostgREST retorna sucesso sem erro).
+   */
   const handleDelete = async () => {
     setIsDeleting(true);
 
     try {
       // Delete order (payments and installments will be deleted by CASCADE)
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from("orders")
         .delete()
-        .eq("id", orderId);
+        .eq("id", orderId)
+        .select("id");
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("Pedido não encontrado para exclusão.");
+      }
 
       toast({
         title: "Pedido excluído",
@@ -68,30 +90,31 @@ export function OrderDeleteDialog({
     }
   };
 
+  // Preparar o elemento de trigger, clonando quando fornecido para aplicar ref e props
+  const preparedTrigger = isValidElement(trigger)
+    ? React.cloneElement(trigger as React.ReactElement, { ref, ...triggerProps })
+    : (
+        <Button ref={ref as any} {...triggerProps} variant="destructive" size="sm">
+          <Trash2 className="h-4 w-4 mr-2" />
+          Excluir
+        </Button>
+      );
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        {trigger || (
-          <Button variant="destructive" size="sm">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Excluir
-          </Button>
-        )}
+        {preparedTrigger}
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-          <AlertDialogDescription className="space-y-2">
-            <p>
-              Esta ação não pode ser desfeita. O pedido{" "}
-              <span className="font-semibold">{orderNumber}</span> do cliente{" "}
-              <span className="font-semibold">{customerName}</span> será
-              permanentemente excluído.
-            </p>
-            <p className="text-destructive font-medium">
-              ⚠️ Todos os pagamentos e parcelas relacionados também serão
-              excluídos.
-            </p>
+          <AlertDialogDescription>
+            Esta ação não pode ser desfeita. O pedido{" "}
+            <span className="font-semibold">{orderNumber}</span> do cliente{" "}
+            <span className="font-semibold">{customerName}</span> será permanentemente excluído.
+            <span className="block text-destructive font-medium mt-2">
+              ⚠️ Todos os pagamentos e parcelas relacionados também serão excluídos.
+            </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -107,4 +130,6 @@ export function OrderDeleteDialog({
       </AlertDialogContent>
     </AlertDialog>
   );
-}
+});
+
+OrderDeleteDialog.displayName = "OrderDeleteDialog";

@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { UserPlus, Copy, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Copy, Eye, EyeOff, Wand2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +51,8 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showInitialPassword, setShowInitialPassword] = useState(false);
+  const [createdEmail, setCreatedEmail] = useState<string | null>(null);
+  const [createdName, setCreatedName] = useState<string | null>(null);
 
   const { data: organizations } = useQuery({
     queryKey: ['organizations'],
@@ -72,12 +74,39 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
       email: "",
       full_name: "",
       phone: "",
-      role: "user",
+      role: "agent",
       organization_id: "",
       org_role: "agent",
       initial_password: undefined,
     },
   });
+
+  /**
+   * Gera uma senha forte contendo letras maiúsculas, minúsculas,
+   * números e símbolos, com comprimento configurável.
+   */
+  const generateStrongPassword = (length = 12) => {
+    const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const lower = "abcdefghijklmnopqrstuvwxyz";
+    const numbers = "0123456789";
+    const symbols = "!@#$%^&*()_+[]{}|;:,.<>?";
+    const all = upper + lower + numbers + symbols;
+
+    // Garantir pelo menos um de cada tipo
+    let pwd =
+      upper[Math.floor(Math.random() * upper.length)] +
+      lower[Math.floor(Math.random() * lower.length)] +
+      numbers[Math.floor(Math.random() * numbers.length)] +
+      symbols[Math.floor(Math.random() * symbols.length)];
+
+    for (let i = pwd.length; i < length; i++) {
+      pwd += all[Math.floor(Math.random() * all.length)];
+    }
+    return pwd
+      .split("")
+      .sort(() => Math.random() - 0.5)
+      .join("");
+  };
 
   const onSubmit = async (values: UserCreateData) => {
     setLoading(true);
@@ -99,6 +128,8 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
       if (data.success) {
         // Exibe a senha definida (se fornecida) ou a temporária retornada
         setTempPassword(values.initial_password || data.temporary_password);
+        setCreatedEmail(values.email);
+        setCreatedName(values.full_name);
         toast.success("Usuário criado com sucesso!");
         form.reset();
         onSuccess();
@@ -120,7 +151,36 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
   const handleClose = () => {
     setOpen(false);
     setTempPassword(null);
+    setCreatedEmail(null);
+    setCreatedName(null);
     form.reset();
+  };
+
+  /**
+   * Quando existe apenas uma organização ativa, pré-seleciona
+   * automaticamente para agilizar o cadastro.
+   */
+  useEffect(() => {
+    if (organizations && organizations.length === 1) {
+      form.setValue("organization_id", organizations[0].id);
+    }
+  }, [organizations]);
+
+  /**
+   * Copia um texto de instruções completo para enviar ao novo usuário,
+   * incluindo link de acesso, email e senha criada.
+   */
+  const copyInstructions = () => {
+    if (!tempPassword || !createdEmail) return;
+    const BASE_URL = import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin;
+    const message = `Olá${createdName ? ` ${createdName}` : ""},\n\n` +
+      `Sua conta na Agência de Viagem foi criada.\n` +
+      `Acesse: ${BASE_URL}/auth\n` +
+      `Email: ${createdEmail}\n` +
+      `Senha provisória: ${tempPassword}\n\n` +
+      `Por segurança, altere sua senha após o primeiro acesso em Perfil > Segurança.`;
+    navigator.clipboard.writeText(message);
+    toast.success("Instruções copiadas!");
   };
 
   return (
@@ -170,6 +230,11 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
               <p className="text-sm text-muted-foreground">
                 Copie esta senha e envie ao usuário. Ela não será mostrada novamente.
               </p>
+              <div className="flex gap-2">
+                <Button type="button" variant="secondary" onClick={copyInstructions}>
+                  Copiar instruções para o usuário
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -311,8 +376,20 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
                       >
                         {showInitialPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={() => form.setValue("initial_password", generateStrongPassword())}
+                        title="Gerar senha forte"
+                      >
+                        <Wand2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    A senha deve ter entre 8 e 72 caracteres e conter letras maiúsculas, minúsculas e números.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}
