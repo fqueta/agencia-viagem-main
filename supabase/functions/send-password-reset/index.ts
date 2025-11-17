@@ -57,12 +57,19 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // Resolver base de redirecionamento
+    // Prioridade: AUTH_REDIRECT_BASE_URL (env) > Origin da requisição > domínio padrão
+    const redirectBase =
+      Deno.env.get("AUTH_REDIRECT_BASE_URL") ??
+      req.headers.get('origin') ??
+      'https://viagens.ctloja.com.br';
+
     // Gerar token de recuperação de senha
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email: email,
       options: {
-        redirectTo: `${req.headers.get('origin') || 'https://agencia-viagem.maisaqui.com.br'}/reset-password`,
+        redirectTo: `${redirectBase}/reset-password`,
       }
     });
 
