@@ -6,14 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Plane } from "lucide-react";
+import { Plane, Eye, EyeOff } from "lucide-react";
 import { authLoginSchema, authSignupSchema } from "@/lib/validations";
 
+/**
+ * Auth Page
+ *
+ * PT-BR: Tela de autenticação (login/cadastro/recuperação). Adiciona
+ * alternância de visibilidade no campo de senha para melhorar a UX.
+ * EN: Authentication screen (login/signup/recovery). Adds password
+ * visibility toggle to improve UX.
+ */
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -21,6 +30,16 @@ const Auth = () => {
   // Falls back to current origin when not set.
   const REDIRECT_BASE_URL = import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin;
 
+  /**
+   * handleForgotPassword
+   *
+   * PT-BR: Envia email de recuperação usando o método nativo do Supabase
+   * (resetPasswordForEmail), com redirect configurado via env. Mantém
+   * validação de email e feedback de UI.
+   * EN: Sends a password recovery email using Supabase's native method
+   * (resetPasswordForEmail), with redirect configured via env. Keeps
+   * email validation and UI feedback.
+   */
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -33,11 +52,10 @@ const Auth = () => {
         return;
       }
 
-      // Chamar Edge Function customizada para envio de email em português
-      const { data, error } = await supabase.functions.invoke('send-password-reset', {
-        body: { email }
-      });
-
+      // Fallback nativo: usa Supabase Auth para enviar email de recuperação
+      // Redirect configurado via VITE_AUTH_REDIRECT_URL
+      const redirectTo = `${import.meta.env.VITE_AUTH_REDIRECT_URL}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;
 
       toast.success("Email de recuperação enviado! Verifique sua caixa de entrada.");
@@ -173,14 +191,28 @@ const Auth = () => {
             {!isForgotPassword && (
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
             <Button type="submit" className="w-full" disabled={loading} variant="gradient">

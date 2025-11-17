@@ -15,14 +15,16 @@ interface CreateUserRequest {
   role: 'admin' | 'agent' | 'user';
   organization_id: string;
   org_role: 'owner' | 'admin' | 'agent' | 'viewer';
+  initial_password?: string;
 }
 
 /**
  * Edge Function: create-user
  *
- * Handles admin-only creation of an auth user, assigns app role,
- * and links the user to an organization with a specific org role.
- * Includes proper CORS for browser preflight.
+ * Admin-only: cria um usuário no auth, atribui role do aplicativo,
+ * vincula-o a uma organização e define senha inicial opcional.
+ * Se não houver senha informada, gera uma temporária segura.
+ * Inclui CORS para preflight do navegador.
  */
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -69,7 +71,7 @@ serve(async (req) => {
       );
     }
 
-    const { email, full_name, phone, role, organization_id, org_role }: CreateUserRequest = await req.json();
+    const { email, full_name, phone, role, organization_id, org_role, initial_password }: CreateUserRequest = await req.json();
 
     // Validate input
     if (!email || !full_name || !role || !organization_id || !org_role) {
@@ -77,6 +79,24 @@ serve(async (req) => {
         JSON.stringify({ error: 'Email, nome completo, role, organização e papel na organização são obrigatórios' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Validate initial password if provided
+    let tempPassword: string;
+    if (initial_password && initial_password.length > 0) {
+      const valid = initial_password.length >= 8 && initial_password.length <= 72
+        && /[A-Z]/.test(initial_password)
+        && /[a-z]/.test(initial_password)
+        && /[0-9]/.test(initial_password);
+      if (!valid) {
+        return new Response(
+          JSON.stringify({ error: 'Senha inicial inválida. Exige 8-72 caracteres com maiúscula, minúscula e número.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      tempPassword = initial_password;
+    } else {
+      tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`;
     }
 
     // Verify organization exists
@@ -92,9 +112,6 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Generate temporary password
-    const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`;
 
     // Create user in auth.users (trigger will create profile automatically)
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({

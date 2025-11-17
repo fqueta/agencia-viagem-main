@@ -38,11 +38,19 @@ interface UserCreateDialogProps {
   onSuccess: () => void;
 }
 
+/**
+ * Componente: UserCreateDialog
+ *
+ * Dialog de criação de usuário pelo administrador. Coleta dados básicos,
+ * permite definir uma senha inicial opcional, chama o Edge Function
+ * `create-user` e exibe a senha (definida ou temporária) para cópia.
+ */
 export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showInitialPassword, setShowInitialPassword] = useState(false);
 
   const { data: organizations } = useQuery({
     queryKey: ['organizations'],
@@ -67,6 +75,7 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
       role: "user",
       organization_id: "",
       org_role: "agent",
+      initial_password: undefined,
     },
   });
 
@@ -75,14 +84,21 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
     setTempPassword(null);
 
     try {
+      // Remove senha inicial vazia para evitar validação no backend
+      const payload: any = { ...values };
+      if (!payload.initial_password) {
+        delete payload.initial_password;
+      }
+
       const { data, error } = await supabase.functions.invoke("create-user", {
-        body: values,
+        body: payload,
       });
 
       if (error) throw error;
 
       if (data.success) {
-        setTempPassword(data.temporary_password);
+        // Exibe a senha definida (se fornecida) ou a temporária retornada
+        setTempPassword(values.initial_password || data.temporary_password);
         toast.success("Usuário criado com sucesso!");
         form.reset();
         onSuccess();
@@ -269,6 +285,34 @@ export function UserCreateDialog({ onSuccess }: UserCreateDialogProps) {
                       <SelectItem value="viewer">Visualizador</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="initial_password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Senha inicial (opcional)</FormLabel>
+                  <FormControl>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type={showInitialPassword ? "text" : "password"}
+                        placeholder="Defina uma senha forte"
+                        {...field}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={() => setShowInitialPassword(!showInitialPassword)}
+                      >
+                        {showInitialPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

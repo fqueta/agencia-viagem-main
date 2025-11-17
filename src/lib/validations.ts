@@ -206,6 +206,16 @@ export const userCreateSchema = z.object({
   org_role: z.enum(["owner", "admin", "agent", "viewer"], {
     required_error: "Selecione o papel na organização"
   }),
+  // Senha inicial é opcional; se fornecida, aplica regras mínimas
+  initial_password: z
+    .string()
+    .min(8, "Senha deve ter no mínimo 8 caracteres")
+    .max(72, "Senha deve ter no máximo 72 caracteres")
+    .regex(/[A-Z]/, "A senha deve conter ao menos uma letra maiúscula")
+    .regex(/[a-z]/, "A senha deve conter ao menos uma letra minúscula")
+    .regex(/[0-9]/, "A senha deve conter ao menos um número")
+    .optional()
+    .or(z.literal("")),
 });
 
 export const userUpdateSchema = z.object({
