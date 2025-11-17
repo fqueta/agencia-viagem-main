@@ -134,8 +134,9 @@ serve(async (req: Request): Promise<Response> => {
     const orgName = org?.name ?? "sua organização";
     const inviterName = inviter?.full_name ?? caller.email ?? "Um membro";
 
-    const origin = req.headers.get("origin") || "https://agencia-viagem.maisaqui.com.br";
-    const acceptLink = `${origin}/invite/${invite.token}`;
+    // Use production redirect base from env; avoid relying on request Origin
+    const redirectBase = Deno.env.get("AUTH_REDIRECT_BASE_URL") || "https://viagens.ctloja.com.br";
+    const acceptLink = `${redirectBase}/invite/${invite.token}`;
     const expiresDate = new Date(invite.expires_at).toLocaleDateString("pt-BR");
 
     // Build personalized email HTML (PT-BR)
