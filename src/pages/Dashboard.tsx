@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Plane, Users, Package, ShoppingCart, DollarSign, Calendar, LogOut, AlertTriangle, TrendingUp, TrendingDown, CheckCircle2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -243,28 +245,36 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card/70 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
-              <Plane className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold">TravelManager</h1>
-              <p className="text-xs text-muted-foreground">Sistema de Gestão</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <OrganizationSwitcher />
-            <Button onClick={handleLogout} variant="ghost" size="sm">
-              <LogOut className="w-4 h-4 mr-2" />
-              Sair
-            </Button>
-          </div>
-        </div>
-      </header>
+      
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-0">
+        <div className="fixed top-3 right-4 z-50">
+          {session && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={(session.user as any)?.user_metadata?.avatar_url || undefined} />
+                    <AvatarFallback>{(session.user.user_metadata?.name?.[0] || session.user.user_metadata?.full_name?.[0] || session.user.email?.[0] || "U").toString().toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm">
+                    {session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>
+                  {session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
         <div className="mb-6">
           <h2 className="text-2xl font-semibold">Dashboard</h2>
           <p className="text-sm text-muted-foreground">Visão geral do seu negócio</p>
