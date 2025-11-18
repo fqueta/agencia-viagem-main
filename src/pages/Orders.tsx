@@ -355,7 +355,7 @@ const Orders = () => {
                     <TableCell>{order.customers?.full_name}</TableCell>
                     <TableCell>{order.travel_packages?.name}</TableCell>
                     <TableCell>
-                      {new Date(order.travel_date).toLocaleDateString("pt-BR")}
+                      {formatDateOnlyDisplay(order.travel_date)}
                     </TableCell>
                     <TableCell>
                       R$ {Number(order.total_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
@@ -438,3 +438,19 @@ const Orders = () => {
 };
 
 export default Orders;
+
+  /**
+   * formatDateOnlyDisplay
+   *
+   * PT-BR: Formata uma string de data (YYYY-MM-DD) para exibição em pt-BR
+   * sem criar objetos Date, evitando deslocamentos por timezone.
+   * EN: Formats a date-only string (YYYY-MM-DD) to pt-BR display without
+   * creating Date objects to avoid timezone shifts.
+   */
+  function formatDateOnlyDisplay(dateStr: string | null | undefined): string {
+    if (!dateStr) return "";
+    const parts = String(dateStr).split("-");
+    if (parts.length !== 3) return String(dateStr);
+    const [year, month, day] = parts;
+    return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+  }

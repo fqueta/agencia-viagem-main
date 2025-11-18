@@ -36,6 +36,10 @@ const Payments = () => {
   const [paymentDateOnly, setPaymentDateOnly] = useState<string>("");
   const [isEditDueDateOpen, setIsEditDueDateOpen] = useState(false);
   const [dueDateOnly, setDueDateOnly] = useState<string>("");
+  // Dialog de lançamento de pagamento (igual ao OrderView)
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [paymentDateInput, setPaymentDateInput] = useState<string>("");
+  const [paymentMethodInput, setPaymentMethodInput] = useState<string>("");
   const [installmentCount, setInstallmentCount] = useState("1");
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
@@ -157,6 +161,75 @@ const Payments = () => {
     if (selectedInstallment?.payment_id) {
       loadInstallments(selectedInstallment.payment_id);
     }
+  };
+
+  /**
+   * handleLaunchPayment
+   *
+   * PT-BR: Lança pagamento para a parcela selecionada, definindo data, método
+   * e marcando o status como "paid". Atualiza o estado local e recalcula o
+   * status do pagamento principal (paid/partial).
+   * EN: Launches a payment for the selected installment, setting date, method
+   * and marking the status as "paid". Updates local state and recalculates the
+   * main payment status (paid/partial).
+   */
+  const handleLaunchPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInstallment || !selectedPayment) return;
+
+    const effectiveDate = paymentDateInput || new Date().toISOString().split("T")[0];
+    const effectiveMethod = paymentMethodInput || selectedInstallment.payment_method || "cash";
+
+    const { error } = await supabase
+      .from("installments")
+      .update({
+        status: "paid",
+        payment_date: effectiveDate,
+        payment_method: effectiveMethod,
+      })
+      .eq("id", selectedInstallment.id);
+
+    if (error) {
+      toast.error("Erro ao lançar pagamento: " + error.message);
+      return;
+    }
+
+    // Atualiza estado local das parcelas do pagamento atual
+    setInstallments((prev) => {
+      const arr = prev[selectedPayment.id] || [];
+      const nextArr = arr.map((i) =>
+        i.id === selectedInstallment.id
+          ? { ...i, status: "paid", payment_date: effectiveDate, payment_method: effectiveMethod }
+          : i
+      );
+      return { ...prev, [selectedPayment.id]: nextArr };
+    });
+
+    // Recalcula e atualiza status do pagamento principal
+    const current = installments[selectedPayment.id] || [];
+    const updatedAll = current.map((i) =>
+      i.id === selectedInstallment.id
+        ? { ...i, status: "paid", payment_date: effectiveDate, payment_method: effectiveMethod }
+        : i
+    );
+    const allPaid = updatedAll.every((i) => i.status === "paid");
+    const newStatus = allPaid ? "paid" : "partial";
+
+    const { error: payErr } = await supabase
+      .from("payments")
+      .update({ status: newStatus })
+      .eq("id", selectedPayment.id);
+
+    if (payErr) {
+      toast.error("Pagamento lançado, mas falhou ao atualizar status geral: " + payErr.message);
+    } else {
+      setPayments((prev) => prev.map((p) => (p.id === selectedPayment.id ? { ...p, status: newStatus } : p)));
+    }
+
+    toast.success("Pagamento lançado com sucesso");
+    setIsPaymentDialogOpen(false);
+    setPaymentDateInput("");
+    setPaymentMethodInput("");
   };
 
   /**
@@ -625,7 +698,7 @@ const Payments = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                          {formatDateOnlyDisplay(payment.due_date)}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2 items-center">
@@ -755,6 +828,7 @@ const Payments = () => {
                             {installment.payment_method || "-"}
                           </TableCell>
                           <TableCell className="text-right">
+                            {/* Editar parcela */}
                             <Dialog open={isEditInstallmentOpen && selectedInstallment?.id === installment.id} onOpenChange={(open) => {
                               setIsEditInstallmentOpen(open);
                               if (open) setSelectedInstallment(installment);
@@ -859,122 +933,21 @@ const Payments = () => {
                                 </form>
                               </DialogContent>
                             </Dialog>
-                            {/* Editar somente a data de pagamento */}
-                            <Dialog open={isEditPaymentDateOpen && selectedInstallment?.id === installment.id} onOpenChange={(open) => {
-                              setIsEditPaymentDateOpen(open);
-                              if (open) {
+                            {/* Lançar pagamento (igual ao OrderView) */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Lançar pagamento"
+                              onClick={() => {
                                 setSelectedInstallment(installment);
-                                setPaymentDateOnly(installment.payment_date || "");
-                              }
-                            }}>
-                              <DialogTrigger asChild>
-                                <Button variant="ghost" size="sm" title="Editar data de pagamento">
-                                  <CalendarDays className="w-4 h-4" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Editar Data de Pagamento</DialogTitle>
-                                  <DialogDescription>
-                                    Atualize somente a data, sem marcar como pago.
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <form onSubmit={handleUpdateInstallment} className="space-y-4">
-                                  <div>
-                                    <Label>Status</Label>
-                                    <Select
-                                      value={selectedInstallment?.status ?? installment.status}
-                                      onValueChange={(value) =>
-                                        setSelectedInstallment({ ...selectedInstallment, status: value })
-                                      }
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="pending">Pendente</SelectItem>
-                                        <SelectItem value="paid">Pago</SelectItem>
-                                        <SelectItem value="overdue">Atrasado</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div>
-                                    <Label>Data de Pagamento</Label>
-                                    <Input
-                                      type="date"
-                                      value={paymentDateOnly}
-                                      onChange={(e) => {
-                                        setPaymentDateOnly(e.target.value);
-                                        setSelectedInstallment({ ...selectedInstallment, payment_date: e.target.value });
-                                      }}
-                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
-                                    />
-                                  </div>
-                                  <div className="flex justify-end gap-2">
-                                    <Button type="button" variant="outline" onClick={() => setIsEditPaymentDateOpen(false)}>Cancelar</Button>
-                                    <Button type="submit">Salvar</Button>
-                                  </div>
-                                </form>
-                              </DialogContent>
-                            </Dialog>
-                            {/* Editar somente a data de vencimento */}
-                            <Dialog open={isEditDueDateOpen && selectedInstallment?.id === installment.id} onOpenChange={(open) => {
-                              setIsEditDueDateOpen(open);
-                              if (open) {
-                                setSelectedInstallment(installment);
-                                setDueDateOnly(installment.due_date || "");
-                              }
-                            }}>
-                              <DialogTrigger asChild>
-                                <Button variant="ghost" size="sm" title="Editar vencimento">
-                                  <CalendarDays className="w-4 h-4" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Editar Vencimento</DialogTitle>
-                                  <DialogDescription>
-                                    Atualize somente o vencimento da parcela.
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <form onSubmit={handleUpdateInstallment} className="space-y-4">
-                                  <div>
-                                    <Label>Status</Label>
-                                    <Select
-                                      value={selectedInstallment?.status ?? installment.status}
-                                      onValueChange={(value) =>
-                                        setSelectedInstallment({ ...selectedInstallment, status: value })
-                                      }
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="pending">Pendente</SelectItem>
-                                        <SelectItem value="paid">Pago</SelectItem>
-                                        <SelectItem value="overdue">Atrasado</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div>
-                                    <Label>Data de Vencimento</Label>
-                                    <Input
-                                      type="date"
-                                      value={dueDateOnly}
-                                      onChange={(e) => {
-                                        setDueDateOnly(e.target.value);
-                                        setSelectedInstallment({ ...selectedInstallment, due_date: e.target.value });
-                                      }}
-                                      disabled={(selectedInstallment?.status ?? installment.status) === "paid"}
-                                    />
-                                  </div>
-                                  <div className="flex justify-end gap-2">
-                                    <Button type="button" variant="outline" onClick={() => setIsEditDueDateOpen(false)}>Cancelar</Button>
-                                    <Button type="submit">Salvar</Button>
-                                  </div>
-                                </form>
-                              </DialogContent>
-                            </Dialog>
+                                setSelectedPayment(payment);
+                                setPaymentDateInput(installment.payment_date || new Date().toISOString().split("T")[0]);
+                                setPaymentMethodInput(installment.payment_method || "");
+                                setIsPaymentDialogOpen(true);
+                              }}
+                            >
+                              <CreditCard className="w-4 h-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -994,9 +967,72 @@ const Payments = () => {
             </Table>
           </CardContent>
         </Card>
+        {/* Diálogo de Lançamento de Pagamento (padronizado com OrderView) */}
+        <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Lançar Pagamento</DialogTitle>
+              <DialogDescription>
+                Defina a data e o método de pagamento para a parcela selecionada.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedInstallment && (
+              <form onSubmit={handleLaunchPayment} className="space-y-4">
+                <div>
+                  <Label>Data de Pagamento</Label>
+                  <Input
+                    type="date"
+                    value={paymentDateInput}
+                    onChange={(e) => setPaymentDateInput(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Método de Pagamento</Label>
+                  <Select
+                    value={paymentMethodInput}
+                    onValueChange={(value) => setPaymentMethodInput(value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o método" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_METHODS.map((method) => (
+                        <SelectItem key={method.value} value={method.value}>
+                          {method.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button type="button" variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">Salvar</Button>
+                </div>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
 };
 
 export default Payments;
+
+  /**
+   * formatDateOnlyDisplay
+   *
+   * PT-BR: Formata uma string de data (YYYY-MM-DD) para exibição em pt-BR
+   * sem criar objetos Date, evitando deslocamentos por timezone.
+   * EN: Formats a date-only string (YYYY-MM-DD) to pt-BR display without
+   * creating Date objects to avoid timezone shifts.
+   */
+  function formatDateOnlyDisplay(dateStr: string | null | undefined): string {
+    if (!dateStr) return "";
+    const parts = String(dateStr).split("-");
+    if (parts.length !== 3) return String(dateStr);
+    const [year, month, day] = parts;
+    return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+  }

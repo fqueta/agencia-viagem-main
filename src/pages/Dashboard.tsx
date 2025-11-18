@@ -15,6 +15,7 @@ import { DateRangeFilter } from "@/components/filters/DateRangeFilter";
 import { StatusCheckboxGroup } from "@/components/filters/StatusCheckboxGroup";
 import { useOrganization } from "@/hooks/useOrganization";
 import { OrganizationSwitcher } from "@/components/organization/OrganizationSwitcher";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Filters {
   quickFilter: string;
@@ -28,6 +29,10 @@ interface Filters {
 /**
  * Página Dashboard com visão geral do negócio.
  * EN: Dashboard page showing business overview and quick actions.
+ */
+/**
+ * Calcula e exibe métricas do período, com detalhamento clicável.
+ * EN: Computes and displays period metrics, with clickable breakdowns.
  */
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -49,6 +54,11 @@ const Dashboard = () => {
     overdue: 0,
     conversionRate: 0,
   });
+
+  const [detailsOpen, setDetailsOpen] = useState<null | "confirmed" | "received" | "overdue">(null);
+  const [confirmedBreakdown, setConfirmedBreakdown] = useState<{ order_number: string; status: string | null; amount: number; confirmed_at: string | null }[]>([]);
+  const [receivedBreakdown, setReceivedBreakdown] = useState<{ installment_number: number; amount: number; payment_date: string | null; payment_id: string; package_name?: string }[]>([]);
+  const [overdueBreakdown, setOverdueBreakdown] = useState<{ installment_number?: number; amount: number; due_date: string | null; payment_id: string; package_name?: string }[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -82,17 +92,27 @@ const Dashboard = () => {
     }
   }, [filters, session, organizationId]);
 
-  const getDateRange = (filters: Filters): { startDate: string; endDate: string } => {
+  /**
+   * Calcula o intervalo de datas considerando horário local.
+   * Retorna também as strings somente-data (YYYY-MM-DD) para colunas do tipo date.
+   * EN: Computes date ranges with local time and returns date-only strings.
+   */
+  const getDateRange = (filters: Filters): { startDate: string; endDate: string; startDateOnly: string; endDateOnly: string } => {
     const now = new Date();
     let startDate = "";
     let endDate = now.toISOString();
+    let startDateOnly = "";
+    let endDateOnly = toDateOnly(new Date());
 
     if (filters.quickFilter !== "all") {
       const startDateTime = new Date();
+      const endDateTime = new Date();
       
       switch (filters.quickFilter) {
         case "today":
           startDateTime.setHours(0, 0, 0, 0);
+          endDateTime.setHours(23, 59, 59, 999);
+          endDate = endDateTime.toISOString();
           break;
         case "week":
           const dayOfWeek = startDateTime.getDay();
@@ -122,21 +142,61 @@ const Dashboard = () => {
       }
       
       startDate = startDateTime.toISOString();
+      startDateOnly = toDateOnly(startDateTime);
+      endDateOnly = toDateOnly(endDateTime);
     }
 
     if (filters.dateRange.start) {
       startDate = new Date(filters.dateRange.start).toISOString();
+      startDateOnly = filters.dateRange.start;
     }
     if (filters.dateRange.end) {
       endDate = new Date(filters.dateRange.end + "T23:59:59").toISOString();
+      endDateOnly = filters.dateRange.end;
     }
 
-    return { startDate, endDate };
+    return { startDate, endDate, startDateOnly, endDateOnly };
   };
 
+  /**
+   * Converte Date para string YYYY-MM-DD no horário local.
+   * EN: Converts a Date to YYYY-MM-DD using local time.
+   */
+  function toDateOnly(d: Date): string {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * formatDateOnlyDisplay
+   *
+   * Formata uma string de data somente (YYYY-MM-DD) para exibição em pt-BR
+   * sem sofrer deslocamentos de timezone. Não cria Date a partir de uma
+   * string UTC, evitando cair para o dia anterior em ambientes GMT-3.
+   *
+   * Parâmetros:
+   * - dateStr: string ou null no formato YYYY-MM-DD.
+   *
+   * Retorno:
+   * - string no formato DD/MM/YYYY ou "sem data" quando null.
+   */
+  function formatDateOnlyDisplay(dateStr: string | null): string {
+    if (!dateStr) return "sem data";
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+  }
+
+  /**
+   * Carrega métricas do período e popula os detalhamentos.
+   * EN: Loads period metrics and populates breakdown lists.
+   */
   const loadStats = async (orgId: string, filters: Filters) => {
     try {
-      const { startDate, endDate } = getDateRange(filters);
+      const { startDate, endDate, startDateOnly, endDateOnly } = getDateRange(filters);
 
       // Query base para pacotes (não filtrado por data)
       const packagesRes = await supabase
@@ -156,7 +216,7 @@ const Dashboard = () => {
       // Query para pedidos com filtro de data e status
       let ordersQuery = supabase
         .from("orders")
-        .select("total_amount, status, created_at")
+        .select("order_number, total_amount, status, created_at, confirmed_at")
         .eq("organization_id", orgId);
       
       if (startDate) ordersQuery = ordersQuery.gte("created_at", startDate);
@@ -173,46 +233,142 @@ const Dashboard = () => {
       if (startDate) paymentsQuery = paymentsQuery.gte("created_at", startDate);
       if (endDate) paymentsQuery = paymentsQuery.lte("created_at", endDate);
 
-      // Query para installments para calcular valores recebidos e atrasados
+      // Query para installments (pagas) para calcular Valor Recebido
+      // Query de parcelas pagas com filtro por data (YYYY-MM-DD) direto no banco
+      // Para "Hoje", usamos igualdade de data para evitar qualquer ambiguidade.
+      // EN: For "Today", use date equality to avoid any ambiguity.
       let installmentsQuery = supabase
         .from("installments")
-        .select("amount, status, payment_date")
-        .eq("organization_id", orgId);
+        .select("amount, status, payment_date, installment_number, payment_id, payments(orders(travel_packages(name)))")
+        .eq("organization_id", orgId)
+        .eq("status", "paid");
+      if (startDateOnly && endDateOnly && startDateOnly === endDateOnly) {
+        installmentsQuery = installmentsQuery.eq("payment_date", startDateOnly);
+      } else {
+        if (startDateOnly) installmentsQuery = installmentsQuery.gte("payment_date", startDateOnly);
+        if (endDateOnly) installmentsQuery = installmentsQuery.lte("payment_date", endDateOnly);
+      }
+      installmentsQuery = installmentsQuery.order("payment_date", { ascending: true });
 
-      const [packagesResult, customersResult, ordersResult, paymentsResult, installmentsResult] = await Promise.all([
+      /**
+       * Overdue Installments Query (Valor Atrasado)
+       * PT-BR: Consulta de parcelas vencidas para o card do Dashboard.
+       *   - Inclui status "overdue" OU "pending" com due_date < hoje (pendente vencida).
+       *   - Quando quickFilter === "all" (Tudo), NÃO filtra por intervalo; apenas aplica due_date < hoje
+       *     para capturar parcelas pendentes que já venceram.
+       *   - Caso contrário, restringe por due_date dentro do período escolhido, mantendo due_date < hoje
+       *     para garantir que apenas vencidas sejam retornadas.
+       * EN: Overdue installments query for Dashboard card.
+       *   - Includes "overdue" OR "pending" with due_date < today.
+       *   - For quickFilter === "all", do not filter by range; only require due_date < today.
+       *   - Otherwise, filter by due_date in the selected range and still require due_date < today.
+       */
+      const todayOnly = new Date().toISOString().split("T")[0];
+      let overdueInstallmentsQuery = supabase
+        .from("installments")
+        .select("amount, status, due_date, payment_id, installment_number, payments(orders(travel_packages(name)))")
+        .eq("organization_id", orgId)
+        .in("status", ["overdue", "pending"])
+        .lt("due_date", todayOnly);
+
+      if (filters.quickFilter !== "all") {
+        if (startDateOnly && endDateOnly && startDateOnly === endDateOnly) {
+          overdueInstallmentsQuery = overdueInstallmentsQuery.eq("due_date", startDateOnly);
+        } else {
+          if (startDateOnly) overdueInstallmentsQuery = overdueInstallmentsQuery.gte("due_date", startDateOnly);
+          if (endDateOnly) overdueInstallmentsQuery = overdueInstallmentsQuery.lte("due_date", endDateOnly);
+        }
+      }
+      overdueInstallmentsQuery = overdueInstallmentsQuery.order("due_date", { ascending: true });
+
+      const [packagesResult, customersResult, ordersResult, paymentsResult, installmentsResult, overdueResult] = await Promise.all([
         packagesRes,
         customersQuery,
         ordersQuery,
         paymentsQuery,
         installmentsQuery,
+        overdueInstallmentsQuery,
       ]);
 
       const orders = ordersResult.data || [];
       const installments = installmentsResult.data || [];
+      const overdueInstallments = overdueResult.data || [];
+      // Debug rápido: confirmar intervalo aplicado e datas retornadas.
+      // EN: Quick debug to confirm applied range and returned dates.
+      try {
+        // Log reclassificado para console.log para aparecer nos níveis padrão.
+        // EN: Use console.log so it shows under default console levels.
+        console.log("[Dashboard] installments filter", { startDateOnly, endDateOnly, count: installments.length, dates: (installments || []).map(i => i.payment_date) });
+      } catch {}
 
       // Calcular receita total
       const revenue = orders.reduce((sum, order) => sum + Number(order.total_amount), 0);
 
-      // Calcular receita confirmada (apenas pedidos confirmed e completed)
-      const confirmedRevenue = orders
-        .filter(order => order.status === "confirmed" || order.status === "completed")
+      // Calcular receita confirmada por data de confirmação (fallback: created_at)
+      const confirmedOrdersList = orders.filter(order => order.status === "confirmed" || order.status === "completed");
+      const confirmedRevenue = confirmedOrdersList
+        .filter(order => {
+          const referenceDate = order.confirmed_at || order.created_at;
+          if (!referenceDate) return false;
+          const refTime = new Date(referenceDate).getTime();
+          const startTime = startDate ? new Date(startDate).getTime() : -Infinity;
+          const endTime = endDate ? new Date(endDate).getTime() : Infinity;
+          return refTime >= startTime && refTime <= endTime;
+        })
         .reduce((sum, order) => sum + Number(order.total_amount), 0);
 
-      // Calcular valor recebido (installments pagos no período)
-      const received = installments
-        .filter(inst => {
-          if (inst.status !== "paid" || !inst.payment_date) return false;
-          const paymentDate = new Date(inst.payment_date).toISOString();
-          if (startDate && paymentDate < startDate) return false;
-          if (endDate && paymentDate > endDate) return false;
-          return true;
+      // Preparar detalhamento de pedidos confirmados
+      const confirmedBreakdownData = confirmedOrdersList
+        .filter(order => {
+          const referenceDate = order.confirmed_at || order.created_at;
+          if (!referenceDate) return false;
+          const refTime = new Date(referenceDate).getTime();
+          const startTime = startDate ? new Date(startDate).getTime() : -Infinity;
+          const endTime = endDate ? new Date(endDate).getTime() : Infinity;
+          return refTime >= startTime && refTime <= endTime;
         })
-        .reduce((sum, inst) => sum + Number(inst.amount), 0);
+        .map(order => ({
+          order_number: order.order_number,
+          status: order.status as string | null,
+          amount: Number(order.total_amount),
+          confirmed_at: order.confirmed_at || order.created_at || null,
+        }));
+
+      // Calcular valor recebido (installments pagos no período)
+      // Como o filtro por data já foi aplicado no banco, apenas garantimos que há data
+      const receivedList = (installments || []).filter(inst => !!inst.payment_date);
+
+      const received = receivedList.reduce((sum, inst) => sum + Number(inst.amount), 0);
+
+      const receivedBreakdownData = receivedList.map(inst => {
+        // EN: Try to extract travel package name from nested relation: installments -> payments -> orders -> travel_packages
+        // PT: Extrai o nome do pacote via relação aninhada: parcelas -> pagamentos -> pedidos -> pacotes
+        const pkgName = (inst as any)?.payments?.orders?.travel_packages?.name as string | undefined;
+        return {
+          installment_number: Number(inst.installment_number),
+          amount: Number(inst.amount),
+          payment_date: inst.payment_date,
+          payment_id: String(inst.payment_id),
+          package_name: pkgName,
+        };
+      });
+
+      // EN: Build overdue breakdown list with due_date and package name for dialog
+      // PT: Monta lista de vencidas com due_date e nome do pacote para o diálogo
+      const overdueBreakdownData = (overdueInstallments || []).map(inst => {
+        const pkgName = (inst as any)?.payments?.orders?.travel_packages?.name as string | undefined;
+        return {
+          installment_number: inst.installment_number ? Number(inst.installment_number) : undefined,
+          amount: Number(inst.amount),
+          due_date: (inst as any)?.due_date || null,
+          payment_id: String(inst.payment_id),
+          package_name: pkgName,
+        };
+      });
 
       // Calcular valor atrasado
-      const overdue = installments
-        .filter(inst => inst.status === "overdue")
-        .reduce((sum, inst) => sum + Number(inst.amount), 0);
+      // Valor atrasado baseado na consulta específica de vencidas
+      const overdue = overdueInstallments.reduce((sum, inst) => sum + Number(inst.amount), 0);
 
       // Calcular taxa de conversão
       const totalOrders = orders.length;
@@ -230,6 +386,10 @@ const Dashboard = () => {
         overdue,
         conversionRate,
       });
+
+      setConfirmedBreakdown(confirmedBreakdownData);
+      setReceivedBreakdown(receivedBreakdownData);
+      setOverdueBreakdown(overdueBreakdownData);
     } catch (error) {
       toast.error("Erro ao carregar estatísticas");
     }
@@ -352,7 +512,8 @@ const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:shadow-md transition-shadow">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDetailsOpen("confirmed")}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Receita Confirmada
@@ -367,7 +528,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDetailsOpen("received")}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Valor Recebido
@@ -376,13 +537,13 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                R$ {stats.received.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                R$ {stats.received.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">pagamentos recebidos</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDetailsOpen("overdue")}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Valor Atrasado
@@ -489,6 +650,79 @@ const Dashboard = () => {
             </CardHeader>
           </Card> */}
         </div>
+        {/* Dialog de detalhamento */}
+        <Dialog open={!!detailsOpen} onOpenChange={(open) => setDetailsOpen(open ? detailsOpen : null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{detailsOpen === "confirmed" ? "Detalhe: Receita Confirmada" : detailsOpen === "received" ? "Detalhe: Valor Recebido" : detailsOpen === "overdue" ? "Detalhe: Valor Atrasado" : ""}</DialogTitle>
+              <DialogDescription>
+                {detailsOpen === "confirmed" ? "Soma de pedidos confirmados/completos no período." : detailsOpen === "received" ? "Soma de parcelas pagas no período." : detailsOpen === "overdue" ? "Soma de parcelas vencidas conforme filtro selecionado." : ""}
+              </DialogDescription>
+            </DialogHeader>
+
+            {detailsOpen === "confirmed" && (
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Total: R$ {stats.confirmedRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
+                <div className="max-h-72 overflow-auto divide-y">
+                  {confirmedBreakdown.length === 0 && (
+                    <div className="py-3 text-sm">Nenhum pedido no período.</div>
+                  )}
+                  {confirmedBreakdown.map((item, idx) => (
+                    <div key={idx} className="py-2 flex items-center justify-between">
+                      <div className="text-sm">Pedido {item.order_number} • {item.status}</div>
+                      <div className="text-sm font-medium">R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {detailsOpen === "received" && (
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Total: R$ {stats.received.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div className="max-h-72 overflow-auto divide-y">
+                  {receivedBreakdown.length === 0 && (
+                    <div className="py-3 text-sm">Nenhuma parcela paga no período.</div>
+                  )}
+                  {receivedBreakdown.map((item, idx) => (
+                    <div key={idx} className="py-2 flex items-center justify-between">
+                      <div className="text-sm">Parcela #{item.installment_number} • {formatDateOnlyDisplay(item.payment_date)}{item.package_name ? ` — ${item.package_name}` : ""}</div>
+                      <div className="text-sm font-medium">R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {detailsOpen === "overdue" && (
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Total: R$ {stats.overdue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
+                <div className="max-h-72 overflow-auto divide-y">
+                  {overdueBreakdown.length === 0 && (
+                    <div className="py-3 text-sm">Nenhuma parcela vencida.</div>
+                  )}
+                  {overdueBreakdown.map((item, idx) => (
+                    <div key={idx} className="py-2 flex items-center justify-between">
+                      <div className="text-sm">{item.installment_number ? `Parcela #${item.installment_number} • ` : ""}{formatDateOnlyDisplay(item.due_date)}{item.package_name ? ` — ${item.package_name}` : ""}</div>
+                      <div className="text-sm font-medium">R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  ))}
+                </div>
+                {/**
+                 * Navigate to Delinquency dashboard
+                 * PT-BR: Botão opcional para abrir o Dashboard de Inadimplência
+                 * EN: Optional button to open the Delinquency dashboard
+                 */}
+                <div className="pt-3">
+                  <Button variant="secondary" onClick={() => navigate("/delinquency")}>
+                    Detalhes de Inadimplentes
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
       </main>
     </div>
   );
