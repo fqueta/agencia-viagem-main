@@ -15,6 +15,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 export function useOrganizationRole() {
   const { organizationId, loading: orgLoading } = useOrganization();
   const [role, setRole] = useState<"owner" | "admin" | "agent" | "viewer" | null>(null);
+  const [isAgent, setIsAgent] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export function useOrganizationRole() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user || !organizationId) {
           setRole(null);
+          setIsAgent(false);
           return;
         }
 
@@ -41,10 +43,28 @@ export function useOrganizationRole() {
           // Em caso de erro, não travar UI – considerar como sem permissão
           console.error("Erro ao carregar role da organização:", error);
           setRole(null);
+          setIsAgent(false);
           return;
         }
+        const orgRole = (data?.role as any) ?? null;
+        setRole(orgRole);
+        setIsAgent(orgRole === "agent");
 
-        setRole((data?.role as any) ?? null);
+        // Fallback: se não houver membership, verificar role no sistema (user_roles)
+        if (!orgRole) {
+          const { data: systemRoleData, error: systemRoleError } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .eq("role", "agent")
+            .limit(1)
+            .maybeSingle();
+
+          if (systemRoleError) {
+            console.warn("Falha ao verificar role de sistema (agent):", systemRoleError);
+          }
+          setIsAgent(!!systemRoleData);
+        }
       } catch (err) {
         console.error("Erro inesperado ao carregar role da organização:", err);
         setRole(null);
@@ -58,5 +78,5 @@ export function useOrganizationRole() {
   }, [orgLoading, organizationId]);
 
   const isOrgAdmin = role === "owner" || role === "admin";
-  return { role, isOrgAdmin, loading };
+  return { role, isOrgAdmin, isAgent, loading };
 }

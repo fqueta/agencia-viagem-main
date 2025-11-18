@@ -10,13 +10,25 @@ interface FilterBarProps {
   activeFiltersCount: number;
   resultsCount?: number;
   totalCount?: number;
+  /**
+   * Optional grid class override to control column layout of children.
+   * Example: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4".
+   */
+  gridClassName?: string;
 }
 
-export function FilterBar({ children, onClear, activeFiltersCount, resultsCount, totalCount }: FilterBarProps) {
+/**
+ * Componente de barra de filtros com cabeçalho e conteúdo colapsável.
+ * Permite exibir contagem de resultados e limpar filtros ativos.
+ *
+ * EN: Filter bar component with a collapsible content area.
+ * Supports showing result counts and clearing active filters.
+ */
+export function FilterBar({ children, onClear, activeFiltersCount, resultsCount, totalCount, gridClassName }: FilterBarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   return (
-    <Card className="mb-4 border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
+    <Card className="mb-6 border bg-card rounded-xl shadow-sm">
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -48,7 +60,9 @@ export function FilterBar({ children, onClear, activeFiltersCount, resultsCount,
             </Button>
           )}
         </div>
-        {isExpanded && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">{children}</div>}
+        {isExpanded && (
+          <div className={gridClassName ?? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"}>{children}</div>
+        )}
       </div>
     </Card>
   );

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, AlertCircle, DollarSign, Users, TrendingUp, Send, Phone, Mail } from "lucide-react";
+import { ArrowLeft, AlertCircle, DollarSign, Users, TrendingUp, Send, Phone, Mail, Link } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,19 +17,25 @@ import { StatusFilter } from "@/components/filters/StatusFilter";
 import { ValueRangeFilter } from "@/components/filters/ValueRangeFilter";
 import { useOrganization } from "@/hooks/useOrganization";
 
-interface OverdueInstallment {
-  id: string;
-  amount: number;
-  due_date: string;
-  installment_number: number;
-  total_installments: number;
-  days_overdue: number;
-  payment_id: string;
-  order_number: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_email: string;
-}
+  /**
+   * OverdueInstallment
+   * Data model for overdue installments used in the Delinquency dashboard.
+   * Includes `order_id` to enable navigation to the order details page.
+   */
+  interface OverdueInstallment {
+    id: string;
+    amount: number;
+    due_date: string;
+    installment_number: number;
+    total_installments: number;
+    days_overdue: number;
+    payment_id: string;
+    order_id?: string;
+    order_number: string;
+    customer_name: string;
+    customer_phone: string;
+    customer_email: string;
+  }
 
 interface DelinquencyStats {
   total_overdue: number;
@@ -128,6 +134,7 @@ export default function Delinquency() {
           total_installments: inst.total_installments,
           days_overdue: daysOverdue,
           payment_id: inst.payment_id,
+          order_id: inst.payments?.order_id,
           order_number: inst.payments?.orders?.order_number || "N/A",
           customer_name: inst.payments?.orders?.customers?.full_name || "N/A",
           customer_phone: inst.payments?.orders?.customers?.phone || "",
@@ -183,6 +190,22 @@ export default function Delinquency() {
         .eq("id", selectedInstallment.id);
 
       if (error) throw error;
+
+      // PT-BR: Envia uma cópia do lembrete para o email do cliente.
+      // EN: Send a copy of the reminder to the customer's email.
+      if (selectedInstallment.customer_email) {
+        const subject = `Lembrete de Cobrança - Pedido ${selectedInstallment.order_number}`;
+        const { error: sendError } = await supabase.functions.invoke("send-reminder", {
+          body: {
+            to: selectedInstallment.customer_email,
+            subject,
+            message: reminderMessage,
+          },
+        });
+        if (sendError) {
+          console.error("Falha ao enviar email de lembrete:", sendError);
+        }
+      }
 
       toast({
         title: "Lembrete registrado",
@@ -544,7 +567,7 @@ export default function Delinquency() {
                           <TableCell>
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button
+                                {/* <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
@@ -556,6 +579,25 @@ export default function Delinquency() {
                                 >
                                   <Send className="h-3 w-3 mr-1" />
                                   Cobrar
+                                </Button> */}
+                                {/* colocar um botão para visualizar detalhes d o pedido */}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    /**
+                                     * Navega para a página de detalhes do pedido
+                                     * Falls back to orders list if `order_id` is missing.
+                                     */
+                                    if (installment.order_id) {
+                                      navigate(`/orders/${installment.order_id}`);
+                                    } else {
+                                      navigate(`/orders`);
+                                    }
+                                  }}
+                                >
+                                  <Link className="h-3 w-3 mr-1" /> 
+                                  Visualizar Pedido
                                 </Button>
                               </DialogTrigger>
                               <DialogContent>

@@ -19,12 +19,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useOrganizationRole } from "@/hooks/useOrganizationRole";
 
+/**
+ * Página de listagem de pedidos com filtros e tabela.
+ * EN: Orders listing page with filter bar and orders table.
+ */
 const Orders = () => {
   const navigate = useNavigate();
   const { organizationId, loading: orgLoading } = useOrganization();
+  const { isOrgAdmin, role, isAgent } = useOrganizationRole();
+  // Pode excluir: admin/owner ou agent (inclui fallback de role de sistema)
+  const canDelete = isOrgAdmin || isAgent;
+  console.log("canDelete", canDelete, { role, isOrgAdmin, isAgent });
   const [orders, setOrders] = useState<any[]>([]);
   const [filters, setFilters] = useState({
     search: "",
@@ -268,36 +277,45 @@ const Orders = () => {
           activeFiltersCount={activeFiltersCount}
           resultsCount={filteredOrders.length}
           totalCount={orders.length}
+          gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end"
         >
-          <SearchInput
-            value={filters.search}
-            onChange={(value) => setFilters({ ...filters, search: value })}
-            placeholder="Buscar por pedido, cliente ou pacote..."
-          />
-          <StatusFilter
-            value={filters.status}
-            onChange={(value) => setFilters({ ...filters, status: value })}
-            options={[
-              { value: "all", label: "Todos" },
-              { value: "pending", label: "Pendente" },
-              { value: "confirmed", label: "Confirmado" },
-              { value: "completed", label: "Concluído" },
-              { value: "cancelled", label: "Cancelado" },
-            ]}
-          />
-          <DateRangeFilter
-            label="Data da Viagem"
-            startDate={filters.dateStart}
-            endDate={filters.dateEnd}
-            onStartChange={(value) => setFilters({ ...filters, dateStart: value })}
-            onEndChange={(value) => setFilters({ ...filters, dateEnd: value })}
-          />
-          <ValueRangeFilter
-            minValue={filters.minValue}
-            maxValue={filters.maxValue}
-            onMinChange={(value) => setFilters({ ...filters, minValue: value })}
-            onMaxChange={(value) => setFilters({ ...filters, maxValue: value })}
-          />
+          <div className="lg:col-span-4">
+            <SearchInput
+              value={filters.search}
+              onChange={(value) => setFilters({ ...filters, search: value })}
+              placeholder="Buscar por pedido, cliente ou pacote..."
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <StatusFilter
+              value={filters.status}
+              onChange={(value) => setFilters({ ...filters, status: value })}
+              options={[
+                { value: "all", label: "Todos" },
+                { value: "pending", label: "Pendente" },
+                { value: "confirmed", label: "Confirmado" },
+                { value: "completed", label: "Concluído" },
+                { value: "cancelled", label: "Cancelado" },
+              ]}
+            />
+          </div>
+          <div className="lg:col-span-3">
+            <DateRangeFilter
+              label="Data da Viagem"
+              startDate={filters.dateStart}
+              endDate={filters.dateEnd}
+              onStartChange={(value) => setFilters({ ...filters, dateStart: value })}
+              onEndChange={(value) => setFilters({ ...filters, dateEnd: value })}
+            />
+          </div>
+          <div className="lg:col-span-3">
+            <ValueRangeFilter
+              minValue={filters.minValue}
+              maxValue={filters.maxValue}
+              onMinChange={(value) => setFilters({ ...filters, minValue: value })}
+              onMaxChange={(value) => setFilters({ ...filters, maxValue: value })}
+            />
+          </div>
         </FilterBar>
 
         <Card>
@@ -353,7 +371,7 @@ const Orders = () => {
                             <Edit className="h-4 w-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          {isOrgAdmin && (
+                          {canDelete ? (
                             <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
                               <OrderDeleteDialog
                                 orderId={order.id}
@@ -368,6 +386,22 @@ const Orders = () => {
                                 }
                               />
                             </DropdownMenuItem>
+                          ) : (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <DropdownMenuItem disabled>
+                                    <span className="flex items-center text-muted-foreground w-full">
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Excluir
+                                    </span>
+                                  </DropdownMenuItem>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Sem permissão para excluir. Usuários com papel "viewer" não podem excluir.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>

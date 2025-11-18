@@ -48,7 +48,11 @@ export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps 
   const { toast } = useToast();
   const navigate = useNavigate();
   const { organizationId } = useOrganization();
-  const { isOrgAdmin } = useOrganizationRole();
+  const { isOrgAdmin, role, isAgent } = useOrganizationRole();
+
+  // Permissão efetiva para excluir: Admin/Owner ou Agent
+  // EN: Effective delete permission: Admin/Owner or Agent
+  const canDelete = isOrgAdmin || isAgent;
 
   /**
    * handleDelete
@@ -81,7 +85,7 @@ export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps 
         return;
       }
 
-      if (!isOrgAdmin) {
+      if (!canDelete) {
         toast({
           title: "Sem permissão",
           description: "Você não tem permissão para excluir pedidos nesta organização.",
@@ -149,7 +153,7 @@ export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps 
             <span className="block text-destructive font-medium mt-2">
               ⚠️ Todos os pagamentos e parcelas relacionados também serão excluídos.
             </span>
-            {!isOrgAdmin && (
+            {!canDelete && (
               <span className="block text-destructive font-medium mt-2">
                 Você não tem permissão para excluir pedidos nesta organização.
               </span>
@@ -160,10 +164,10 @@ export const OrderDeleteDialog = forwardRef<HTMLElement, OrderDeleteDialogProps 
           <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
-            disabled={isDeleting || !isOrgAdmin}
+            disabled={isDeleting || !canDelete}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {isDeleting ? "Excluindo..." : isOrgAdmin ? "Excluir Pedido" : "Sem permissão"}
+            {isDeleting ? "Excluindo..." : canDelete ? "Excluir Pedido" : "Sem permissão"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

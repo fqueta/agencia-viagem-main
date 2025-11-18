@@ -64,6 +64,12 @@ const CustomerEdit = () => {
     setLoading(false);
   };
 
+  /**
+   * handleSubmit
+   * Validates and updates customer data.
+   * Fix: Pass empty strings for optional fields so the Zod schema can
+   * transform them to undefined, avoiding "Required" errors when values are null.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData) return;
@@ -75,12 +81,14 @@ const CustomerEdit = () => {
         full_name: formData.full_name,
         email: formData.email,
         phone: formData.phone,
-        cpf: formData.cpf || undefined,
-        birth_date: formData.birth_date || undefined,
-        address: formData.address || undefined,
-        city: formData.city || undefined,
-        state: formData.state || undefined,
-        zip_code: formData.zip_code || undefined,
+        // Optional fields should be empty string when not provided
+        // to allow schema transform to undefined without triggering Required
+        cpf: formData.cpf ?? "",
+        birth_date: formData.birth_date ?? "",
+        address: formData.address ?? "",
+        city: formData.city ?? "",
+        state: formData.state ?? "",
+        zip_code: formData.zip_code ?? "",
       });
 
       const { data: { user } } = await supabase.auth.getUser();

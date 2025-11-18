@@ -23,6 +23,10 @@ interface Filters {
   statuses: string[];
 }
 
+/**
+ * Página Dashboard com visão geral do negócio.
+ * EN: Dashboard page showing business overview and quick actions.
+ */
 const Dashboard = () => {
   const navigate = useNavigate();
   const { organizationId } = useOrganization();
@@ -238,16 +242,16 @@ const Dashboard = () => {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5">
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card/70 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center">
-              <Plane className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
+              <Plane className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">TravelManager</h1>
-              <p className="text-sm text-muted-foreground">Sistema de Gestão</p>
+              <h1 className="text-xl font-semibold">TravelManager</h1>
+              <p className="text-xs text-muted-foreground">Sistema de Gestão</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -261,12 +265,12 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2">Dashboard</h2>
-          <p className="text-muted-foreground">Visão geral do seu negócio</p>
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold">Dashboard</h2>
+          <p className="text-sm text-muted-foreground">Visão geral do seu negócio</p>
         </div>
 
-        <Card className="mb-8">
+        <Card className="mb-8 border bg-card rounded-xl shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="w-5 h-5" />
@@ -274,30 +278,30 @@ const Dashboard = () => {
             </CardTitle>
             <CardDescription>Selecione o período para análise financeira</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <QuickFilterButtons
-                value={filters.quickFilter}
-                onChange={(value) => setFilters({ ...filters, quickFilter: value, dateRange: { start: "", end: "" } })}
-              />
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              <div className="lg:col-span-4">
+                <QuickFilterButtons
+                  value={filters.quickFilter}
+                  onChange={(value) => setFilters({ ...filters, quickFilter: value, dateRange: { start: "", end: "" } })}
+                />
+              </div>
+              <div className="lg:col-span-5">
+                <DateRangeFilter
+                  startDate={filters.dateRange.start}
+                  endDate={filters.dateRange.end}
+                  onStartChange={(start) => setFilters({ ...filters, dateRange: { ...filters.dateRange, start }, quickFilter: "all" })}
+                  onEndChange={(end) => setFilters({ ...filters, dateRange: { ...filters.dateRange, end }, quickFilter: "all" })}
+                  label="Período Personalizado"
+                />
+              </div>
+              <div className="lg:col-span-3">
+                <StatusCheckboxGroup
+                  selectedStatuses={filters.statuses}
+                  onChange={(statuses) => setFilters({ ...filters, statuses })}
+                />
+              </div>
             </div>
-
-            <Separator />
-
-            <DateRangeFilter
-              startDate={filters.dateRange.start}
-              endDate={filters.dateRange.end}
-              onStartChange={(start) => setFilters({ ...filters, dateRange: { ...filters.dateRange, start }, quickFilter: "all" })}
-              onEndChange={(end) => setFilters({ ...filters, dateRange: { ...filters.dateRange, end }, quickFilter: "all" })}
-              label="Período Personalizado"
-            />
-
-            <Separator />
-
-            <StatusCheckboxGroup
-              selectedStatuses={filters.statuses}
-              onChange={(statuses) => setFilters({ ...filters, statuses })}
-            />
           </CardContent>
         </Card>
 
@@ -308,12 +312,12 @@ const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Pedidos
               </CardTitle>
-              <ShoppingCart className="w-5 h-5 text-secondary" />
+              <ShoppingCart className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{stats.orders}</div>
@@ -321,12 +325,12 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Novos Clientes
               </CardTitle>
-              <Users className="w-5 h-5 text-accent" />
+              <Users className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{stats.customers}</div>
@@ -334,12 +338,12 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Receita Total
               </CardTitle>
-              <DollarSign className="w-5 h-5 text-primary" />
+              <DollarSign className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
@@ -349,12 +353,12 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Taxa de Conversão
               </CardTitle>
-              <TrendingUp className="w-5 h-5 text-success" />
+              <TrendingUp className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{stats.conversionRate.toFixed(1)}%</div>
@@ -364,57 +368,57 @@ const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:shadow-lg transition-shadow border-success/50">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Receita Confirmada
               </CardTitle>
-              <CheckCircle2 className="w-5 h-5 text-success" />
+              <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-success">
+              <div className="text-3xl font-bold">
                 R$ {stats.confirmedRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">pedidos confirmados/completos</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow border-primary/50">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Valor Recebido
               </CardTitle>
-              <DollarSign className="w-5 h-5 text-primary" />
+              <DollarSign className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-primary">
+              <div className="text-3xl font-bold">
                 R$ {stats.received.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">pagamentos recebidos</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow border-destructive/50">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Valor Atrasado
               </CardTitle>
-              <AlertTriangle className="w-5 h-5 text-destructive" />
+              <AlertTriangle className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-destructive">
+              <div className="text-3xl font-bold">
                 R$ {stats.overdue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">parcelas vencidas</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow border-secondary/50">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Contas Pendentes
               </CardTitle>
-              <Calendar className="w-5 h-5 text-secondary" />
+              <Calendar className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{stats.pending}</div>
@@ -431,10 +435,10 @@ const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/packages")}>
+          {/* <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/packages")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-primary" />
+                <Package className="w-5 h-5 text-muted-foreground" />
                 Pacotes de Viagem
               </CardTitle>
               <CardDescription>Gerencie seus pacotes turísticos</CardDescription>
@@ -444,7 +448,7 @@ const Dashboard = () => {
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/customers")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-accent" />
+                <Users className="w-5 h-5 text-muted-foreground" />
                 Clientes
               </CardTitle>
               <CardDescription>Cadastro e gestão de clientes</CardDescription>
@@ -454,7 +458,7 @@ const Dashboard = () => {
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/orders")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5 text-secondary" />
+                <ShoppingCart className="w-5 h-5 text-muted-foreground" />
                 Pedidos
               </CardTitle>
               <CardDescription>Gerencie vendas e reservas</CardDescription>
@@ -464,17 +468,17 @@ const Dashboard = () => {
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/payments")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-success" />
+                <DollarSign className="w-5 h-5 text-muted-foreground" />
                 Contas a Receber
               </CardTitle>
               <CardDescription>Controle financeiro</CardDescription>
             </CardHeader>
-          </Card>
+          </Card> */}
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/birthdays")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-secondary" />
+                <Calendar className="w-5 h-5 text-muted-foreground" />
                 Aniversários
               </CardTitle>
               <CardDescription>Notificações de clientes</CardDescription>
@@ -484,22 +488,22 @@ const Dashboard = () => {
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/delinquency")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-destructive" />
+                <AlertTriangle className="w-5 h-5 text-muted-foreground" />
                 Inadimplência
               </CardTitle>
               <CardDescription>Gestão de cobranças</CardDescription>
             </CardHeader>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/organization/settings")}>
+          {/* <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/organization/settings")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" />
+                <Users className="w-5 h-5 text-muted-foreground" />
                 Equipe
               </CardTitle>
               <CardDescription>Gerenciar membros e convites</CardDescription>
             </CardHeader>
-          </Card>
+          </Card> */}
         </div>
       </main>
     </div>

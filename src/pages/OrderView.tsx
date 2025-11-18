@@ -11,10 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Edit, Plus, Trash2, CalendarDays } from "lucide-react";
+import { ArrowLeft, Edit, Plus, Trash2, CalendarDays, CreditCard } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { OrderDeleteDialog } from "@/components/orders/OrderDeleteDialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOrganization } from "@/hooks/useOrganization";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { useOrganizationRole } from "@/hooks/useOrganizationRole";
@@ -58,7 +59,9 @@ const OrderView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { organizationId } = useOrganization();
-  const { isOrgAdmin } = useOrganizationRole();
+  const { isOrgAdmin, role, isAgent } = useOrganizationRole();
+  // Pode excluir: admin/owner ou agent (inclui fallback de role de sistema)
+  const canDelete = isOrgAdmin || isAgent;
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([]);
@@ -68,6 +71,9 @@ const OrderView = () => {
   const [installmentCount, setInstallmentCount] = useState(2);
   const [isEditDueDateOpen, setIsEditDueDateOpen] = useState(false);
   const [dueDateOnly, setDueDateOnly] = useState<string>("");
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [paymentDateInput, setPaymentDateInput] = useState<string>("");
+  const [paymentMethodInput, setPaymentMethodInput] = useState<string>("");
   const DEBOUNCE_MS = 600;
   const amountDebounceRef = useRef<number | null>(null);
   const dueDateDebounceRef = useRef<number | null>(null);
@@ -265,6 +271,60 @@ const OrderView = () => {
   };
 
   /**
+   * Lança pagamento para a parcela selecionada, definindo data, método
+   * e marcando o status como "paid". Após salvar, atualiza o estado local
+   * e recalcula o status do pagamento principal (paid/partial).
+   * EN: Launches a payment for the selected installment, setting date, method
+   * and marking the status as "paid". After saving, updates local state and
+   * recalculates the main payment status (paid/partial).
+   */
+  const handleLaunchPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInstallment || !payment) return;
+
+    const effectiveDate = paymentDateInput || new Date().toISOString().split("T")[0];
+    const effectiveMethod = paymentMethodInput || selectedInstallment.payment_method || "cash";
+
+    const { error } = await supabase
+      .from("installments")
+      .update({
+        status: "paid",
+        payment_date: effectiveDate,
+        payment_method: effectiveMethod,
+      })
+      .eq("id", selectedInstallment.id);
+
+    if (error) {
+      toast({ title: "Erro ao lançar pagamento", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    // Atualiza estado local
+    setInstallments((prev) => prev.map((i) => (
+      i.id === selectedInstallment.id ? { ...i, status: "paid", payment_date: effectiveDate, payment_method: effectiveMethod } : i
+    )));
+
+    // Recalcula status do pagamento principal
+    const allPaid = installments.every((i) => (i.id === selectedInstallment.id ? true : i.status === "paid"));
+    const newStatus = allPaid ? "paid" : "partial";
+    const { error: payErr } = await supabase
+      .from("payments")
+      .update({ status: newStatus })
+      .eq("id", payment.id);
+
+    if (payErr) {
+      toast({ title: "Pagamento atualizado, mas falhou status geral", description: payErr.message, variant: "destructive" });
+    } else {
+      setPayment((prev) => (prev ? { ...prev, status: newStatus } : prev));
+    }
+
+    toast({ title: "Pagamento lançado com sucesso" });
+    setIsPaymentDialogOpen(false);
+    setPaymentDateInput("");
+    setPaymentMethodInput("");
+  };
+
+  /**
    * Atualiza o valor (amount) de uma parcela de forma inline.
    * Recebe o id da parcela e o novo valor numérico.
    */
@@ -431,7 +491,7 @@ const OrderView = () => {
               <Edit className="h-4 w-4 mr-2" />
               Editar Pedido
             </Button>
-            {order && isOrgAdmin && (
+            {order && (canDelete ? (
               <OrderDeleteDialog
                 orderId={order.id}
                 orderNumber={order.order_number}
@@ -443,7 +503,23 @@ const OrderView = () => {
                   </Button>
                 }
               />
-            )}
+            ) : (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button variant="outline" size="sm" disabled>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Excluir
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Sem permissão para excluir. Usuários com papel "viewer" não podem excluir.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
           </div>
         </div>
 
@@ -619,11 +695,12 @@ const OrderView = () => {
                                 size="sm"
                                 onClick={() => {
                                   setSelectedInstallment(inst);
-                                  setDueDateOnly(inst.due_date);
-                                  setIsEditDueDateOpen(true);
+                                  setPaymentDateInput(inst.payment_date || new Date().toISOString().split("T")[0]);
+                                  setPaymentMethodInput(inst.payment_method || "");
+                                  setIsPaymentDialogOpen(true);
                                 }}
                               >
-                                <CalendarDays className="h-4 w-4" />
+                                <CreditCard className="h-4 w-4" />
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -755,6 +832,45 @@ const OrderView = () => {
                   onChange={(e) => setDueDateOnly(e.target.value)}
                   disabled={selectedInstallment.status === "paid"}
                 />
+              </div>
+              <Button type="submit" className="w-full">Salvar</Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Lançar Pagamento</DialogTitle>
+          </DialogHeader>
+          {selectedInstallment && (
+            <form onSubmit={handleLaunchPayment} className="space-y-4">
+              <div>
+                <Label>Data de Pagamento</Label>
+                <Input
+                  type="date"
+                  value={paymentDateInput}
+                  onChange={(e) => setPaymentDateInput(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Método de Pagamento</Label>
+                <Select
+                  value={paymentMethodInput}
+                  onValueChange={(value) => setPaymentMethodInput(value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o método" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHODS.map((method) => (
+                      <SelectItem key={method.value} value={method.value}>
+                        {method.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button type="submit" className="w-full">Salvar</Button>
             </form>
