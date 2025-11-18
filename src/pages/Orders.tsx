@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Plus, ShoppingCart, Edit, Eye, Trash2, Search } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -40,6 +42,9 @@ const Orders = () => {
   const canDelete = isOrgAdmin || isAgent;
   console.log("canDelete", canDelete, { role, isOrgAdmin, isAgent });
   const [orders, setOrders] = useState<any[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<string>("");
+  const [updating, setUpdating] = useState<boolean>(false);
   const [filters, setFilters] = useState({
     search: "",
     status: "all",
@@ -129,6 +134,89 @@ const Orders = () => {
       completed: "Concluído",
     };
     return <Badge variant={variants[status] || "secondary"}>{labels[status] || status}</Badge>;
+  };
+
+  const ORDER_STATUS_OPTIONS = [
+    { value: "pending", label: "Pendente" },
+    { value: "confirmed", label: "Confirmado" },
+    { value: "completed", label: "Concluído" },
+    { value: "cancelled", label: "Cancelado" },
+  ] as const;
+
+  /**
+   * Atualiza o status de um pedido individual no banco (Supabase) e no estado local.
+   * EN: Update a single order's status in Supabase and local state.
+   */
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    if (!organizationId) {
+      toast.error("Organização não encontrada");
+      return;
+    }
+    setUpdating(true);
+    const { error } = await supabase
+      .from("orders")
+      .update({ status })
+      .eq("id", orderId)
+      .eq("organization_id", organizationId);
+
+    if (error) {
+      toast.error("Falha ao atualizar status do pedido");
+    } else {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
+      toast.success("Status do pedido atualizado");
+    }
+    setUpdating(false);
+  };
+
+  /**
+   * Atualiza o status de todos os pedidos selecionados, com feedback e reload opcional.
+   * EN: Bulk-update status for selected orders with feedback and optional reload.
+   */
+  const bulkUpdateSelectedOrdersStatus = async (status: string) => {
+    if (selectedIds.length === 0) return;
+    if (!organizationId) {
+      toast.error("Organização não encontrada");
+      return;
+    }
+    setUpdating(true);
+    const { error } = await supabase
+      .from("orders")
+      .update({ status })
+      .in("id", selectedIds)
+      .eq("organization_id", organizationId);
+
+    if (error) {
+      toast.error("Falha ao aplicar status nos selecionados");
+    } else {
+      setOrders((prev) => prev.map((o) => (selectedIds.includes(o.id) ? { ...o, status } : o)));
+      toast.success("Status aplicado aos pedidos selecionados");
+      setSelectedIds([]);
+    }
+    setUpdating(false);
+  };
+
+  /**
+   * Alterna seleção de uma linha (pedido) na tabela.
+   * EN: Toggle selection for a single order row in the table.
+   */
+  const toggleRowSelection = (orderId: string, checked: boolean | string) => {
+    const isChecked = checked === true || checked === "indeterminate";
+    setSelectedIds((prev) =>
+      isChecked ? [...new Set([...prev, orderId])] : prev.filter((id) => id !== orderId)
+    );
+  };
+
+  /**
+   * Alterna seleção de todas as linhas visíveis (após filtros).
+   * EN: Toggle selection for all visible rows (after filters).
+   */
+  const toggleAllSelection = (checked: boolean | string) => {
+    const isChecked = checked === true || checked === "indeterminate";
+    if (isChecked) {
+      setSelectedIds(filteredOrders.map((o: any) => o.id));
+    } else {
+      setSelectedIds([]);
+    }
   };
 
   const getPaymentStatusBadge = (order: any) => {
@@ -335,9 +423,44 @@ const Orders = () => {
             <CardDescription>Todos os pedidos registrados</CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Área de gerenciamento de status em lote */}
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <Label className="text-sm">Gerenciar Status</Label>
+              <Select value={bulkStatus} onValueChange={(v) => setBulkStatus(v)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Selecionar novo status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ORDER_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="secondary"
+                disabled={selectedIds.length === 0 || !bulkStatus || updating}
+                onClick={() => bulkUpdateSelectedOrdersStatus(bulkStatus)}
+              >
+                Aplicar aos selecionados ({selectedIds.length})
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={selectedIds.length === 0 || updating}
+                onClick={() => setSelectedIds([])}
+              >
+                Limpar seleção
+              </Button>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={selectedIds.length > 0 && selectedIds.length === filteredOrders.length}
+                      onCheckedChange={toggleAllSelection}
+                      aria-label="Selecionar todos"
+                    />
+                  </TableHead>
                   <TableHead>Nº Pedido</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Pacote</TableHead>
@@ -351,6 +474,13 @@ const Orders = () => {
               <TableBody>
                 {filteredOrders.map((order) => (
                   <TableRow key={order.id}>
+                    <TableCell className="w-10">
+                      <Checkbox
+                        checked={selectedIds.includes(order.id)}
+                        onCheckedChange={(v) => toggleRowSelection(order.id, v)}
+                        aria-label={`Selecionar pedido ${order.order_number}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{order.order_number}</TableCell>
                     <TableCell>{order.customers?.full_name}</TableCell>
                     <TableCell>{order.travel_packages?.name}</TableCell>
@@ -360,7 +490,21 @@ const Orders = () => {
                     <TableCell>
                       R$ {Number(order.total_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                     </TableCell>
-                    <TableCell>{getStatusBadge(order.status)}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(order.status)}
+                        <Select value={order.status} onValueChange={(v) => updateOrderStatus(order.id, v)}>
+                          <SelectTrigger className="w-36 h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ORDER_STATUS_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </TableCell>
                     <TableCell>{getPaymentStatusBadge(order)}</TableCell>
                     <TableCell>
                       <DropdownMenu>
