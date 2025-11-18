@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, DollarSign, CreditCard, Edit, AlertCircle, CalendarDays } from "lucide-react";
+import { ArrowLeft, DollarSign, CreditCard, Edit, AlertCircle, CalendarDays, Search } from "lucide-react";
 import { toast } from "sonner";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { SearchInput } from "@/components/filters/SearchInput";
@@ -19,6 +19,10 @@ import { ValueRangeFilter } from "@/components/filters/ValueRangeFilter";
 import { useOrganization } from "@/hooks/useOrganization";
 import { PAYMENT_METHODS } from "@/lib/constants";
 
+/**
+ * Página Contas a Receber com filtros padronizados e grade 12-colunas.
+ * EN: Accounts Receivable page with standardized filter labels and 12-column grid.
+ */
 const Payments = () => {
   const navigate = useNavigate();
   const { organizationId } = useOrganization();
@@ -513,41 +517,55 @@ const Payments = () => {
           activeFiltersCount={activeFiltersCount}
           resultsCount={filteredPayments.length}
           totalCount={payments.length}
+          gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4"
         >
-          <SearchInput
-            value={filters.search}
-            onChange={(value) => setFilters({ ...filters, search: value })}
-            placeholder="Buscar por pedido ou cliente..."
-          />
-          <StatusFilter
-            value={filters.status}
-            onChange={(value) => setFilters({ ...filters, status: value })}
-            options={[
-              { value: "all", label: "Todos" },
-              { value: "pending", label: "Pendente" },
-              { value: "partial", label: "Parcial" },
-              { value: "paid", label: "Pago" },
-              { value: "overdue", label: "Atrasado" },
-            ]}
-          />
-          <DateRangeFilter
-            label="Vencimento"
-            startDate={filters.dateStart}
-            endDate={filters.dateEnd}
-            onStartChange={(value) => setFilters({ ...filters, dateStart: value })}
-            onEndChange={(value) => setFilters({ ...filters, dateEnd: value })}
-          />
-          <StatusFilter
-            value={filters.paymentType}
-            onChange={(value) => setFilters({ ...filters, paymentType: value })}
-            options={[
-              { value: "all", label: "Todos os tipos" },
-              { value: "single", label: "À vista" },
-              { value: "installments", label: "Parcelado" },
-            ]}
-            label="Tipo de Pagamento"
-            placeholder="Todos os tipos"
-          />
+          <div className="lg:col-span-4 space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Buscar
+            </Label>
+            <SearchInput
+              value={filters.search}
+              onChange={(value) => setFilters({ ...filters, search: value })}
+              placeholder="Buscar por pedido ou cliente..."
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <StatusFilter
+              label="Status"
+              value={filters.status}
+              onChange={(value) => setFilters({ ...filters, status: value })}
+              options={[
+                { value: "all", label: "Todos" },
+                { value: "pending", label: "Pendente" },
+                { value: "partial", label: "Parcial" },
+                { value: "paid", label: "Pago" },
+                { value: "overdue", label: "Atrasado" },
+              ]}
+            />
+          </div>
+          <div className="lg:col-span-3">
+            <DateRangeFilter
+              label="Vencimento"
+              startDate={filters.dateStart}
+              endDate={filters.dateEnd}
+              onStartChange={(value) => setFilters({ ...filters, dateStart: value })}
+              onEndChange={(value) => setFilters({ ...filters, dateEnd: value })}
+            />
+          </div>
+          <div className="lg:col-span-3">
+            <StatusFilter
+              value={filters.paymentType}
+              onChange={(value) => setFilters({ ...filters, paymentType: value })}
+              options={[
+                { value: "all", label: "Todos os tipos" },
+                { value: "single", label: "À vista" },
+                { value: "installments", label: "Parcelado" },
+              ]}
+              label="Tipo de Pagamento"
+              placeholder="Todos os tipos"
+            />
+          </div>
         </FilterBar>
 
         <Card>

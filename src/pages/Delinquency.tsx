@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, AlertCircle, DollarSign, Users, TrendingUp, Send, Phone, Mail, Link } from "lucide-react";
+import { ArrowLeft, AlertCircle, DollarSign, Users, TrendingUp, Send, Phone, Mail, Link, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -46,6 +46,13 @@ interface DelinquencyStats {
 
 const COLORS = ['hsl(var(--destructive))', 'hsl(var(--secondary))', 'hsl(var(--accent))', 'hsl(var(--primary))'];
 
+/**
+ * Delinquency Page
+ * PT-BR: Página de Inadimplência com estatísticas, gráficos e listagem de parcelas atrasadas.
+ * Ajuste: Layout do painel de filtros padronizado em grade de 12 colunas para melhor usabilidade.
+ * EN: Delinquency dashboard with stats, charts, and overdue installments list.
+ * Update: Filter panel layout standardized to a 12-column grid for better UX.
+ */
 export default function Delinquency() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -478,44 +485,57 @@ export default function Delinquency() {
               activeFiltersCount={activeFiltersCount}
               resultsCount={filteredInstallments.length}
               totalCount={overdueInstallments.length}
+              gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4"
             >
-              <SearchInput
-                value={filters.search}
-                onChange={(value) => setFilters({ ...filters, search: value })}
-                placeholder="Buscar por cliente ou pedido..."
-              />
-              <StatusFilter
-                value={filters.riskLevel}
-                onChange={(value) => setFilters({ ...filters, riskLevel: value })}
-                options={[
-                  { value: "all", label: "Todos os riscos" },
-                  { value: "baixo", label: "Risco Baixo" },
-                  { value: "médio", label: "Risco Médio" },
-                  { value: "alto", label: "Risco Alto" },
-                ]}
-                label="Nível de Risco"
-                placeholder="Todos os riscos"
-              />
-              <StatusFilter
-                value={filters.daysOverdueRange}
-                onChange={(value) => setFilters({ ...filters, daysOverdueRange: value })}
-                options={[
-                  { value: "all", label: "Todos os períodos" },
-                  { value: "0-7", label: "0-7 dias" },
-                  { value: "8-30", label: "8-30 dias" },
-                  { value: "31-60", label: "31-60 dias" },
-                  { value: "60+", label: "60+ dias" },
-                ]}
-                label="Dias de Atraso"
-                placeholder="Todos os períodos"
-              />
-              <ValueRangeFilter
-                label="Valor Devido"
-                minValue={filters.minValue}
-                maxValue={filters.maxValue}
-                onMinChange={(value) => setFilters({ ...filters, minValue: value })}
-                onMaxChange={(value) => setFilters({ ...filters, maxValue: value })}
-              />
+              <div className="lg:col-span-4 space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  Buscar
+                </Label>
+                <SearchInput
+                  value={filters.search}
+                  onChange={(value) => setFilters({ ...filters, search: value })}
+                  placeholder="Buscar por cliente ou pedido..."
+                />
+              </div>
+              <div className="lg:col-span-3">
+                <StatusFilter
+                  value={filters.riskLevel}
+                  onChange={(value) => setFilters({ ...filters, riskLevel: value })}
+                  options={[
+                    { value: "all", label: "Todos os riscos" },
+                    { value: "baixo", label: "Risco Baixo" },
+                    { value: "médio", label: "Risco Médio" },
+                    { value: "alto", label: "Risco Alto" },
+                  ]}
+                  label="Nível de Risco"
+                  placeholder="Todos os riscos"
+                />
+              </div>
+              <div className="lg:col-span-3">
+                <StatusFilter
+                  value={filters.daysOverdueRange}
+                  onChange={(value) => setFilters({ ...filters, daysOverdueRange: value })}
+                  options={[
+                    { value: "all", label: "Todos os períodos" },
+                    { value: "0-7", label: "0-7 dias" },
+                    { value: "8-30", label: "8-30 dias" },
+                    { value: "31-60", label: "31-60 dias" },
+                    { value: "60+", label: "60+ dias" },
+                  ]}
+                  label="Dias de Atraso"
+                  placeholder="Todos os períodos"
+                />
+              </div>
+              <div className="lg:col-span-2">
+                <ValueRangeFilter
+                  label="Valor Devido"
+                  minValue={filters.minValue}
+                  maxValue={filters.maxValue}
+                  onMinChange={(value) => setFilters({ ...filters, minValue: value })}
+                  onMaxChange={(value) => setFilters({ ...filters, maxValue: value })}
+                />
+              </div>
             </FilterBar>
 
             {overdueInstallments.length === 0 ? (

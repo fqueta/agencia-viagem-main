@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, ShoppingCart, Edit, Eye, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, ShoppingCart, Edit, Eye, Trash2, Search } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { SearchInput } from "@/components/filters/SearchInput";
@@ -26,6 +27,10 @@ import { useOrganizationRole } from "@/hooks/useOrganizationRole";
 /**
  * Página de listagem de pedidos com filtros e tabela.
  * EN: Orders listing page with filter bar and orders table.
+ */
+/**
+ * Página Pedidos com filtros padronizados e grade responsiva 12-colunas.
+ * EN: Orders page with standardized filter labels and 12-column responsive grid.
  */
 const Orders = () => {
   const navigate = useNavigate();
@@ -277,9 +282,13 @@ const Orders = () => {
           activeFiltersCount={activeFiltersCount}
           resultsCount={filteredOrders.length}
           totalCount={orders.length}
-          gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end"
+          gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4"
         >
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-4 space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Buscar
+            </Label>
             <SearchInput
               value={filters.search}
               onChange={(value) => setFilters({ ...filters, search: value })}
@@ -288,6 +297,7 @@ const Orders = () => {
           </div>
           <div className="lg:col-span-2">
             <StatusFilter
+              label="Status"
               value={filters.status}
               onChange={(value) => setFilters({ ...filters, status: value })}
               options={[
@@ -310,6 +320,7 @@ const Orders = () => {
           </div>
           <div className="lg:col-span-3">
             <ValueRangeFilter
+              label="Valor Total"
               minValue={filters.minValue}
               maxValue={filters.maxValue}
               onMinChange={(value) => setFilters({ ...filters, minValue: value })}

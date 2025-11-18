@@ -248,33 +248,7 @@ const Dashboard = () => {
       
 
       <main className="container mx-auto px-4 py-0">
-        <div className="fixed top-3 right-4 z-50">
-          {session && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Avatar className="h-6 w-6">
-                    <AvatarImage src={(session.user as any)?.user_metadata?.avatar_url || undefined} />
-                    <AvatarFallback>{(session.user.user_metadata?.name?.[0] || session.user.user_metadata?.full_name?.[0] || session.user.email?.[0] || "U").toString().toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm">
-                    {session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>
-                  {session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sair
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+        {/* Dropdown do usuário foi movido para MainLayout para padronizar o topo */}
         <div className="mb-6">
           <h2 className="text-2xl font-semibold">Dashboard</h2>
           <p className="text-sm text-muted-foreground">Visão geral do seu negócio</p>

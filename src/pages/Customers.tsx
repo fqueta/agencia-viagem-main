@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, Users, Eye, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Users, Eye, Pencil, Search } from "lucide-react";
 import { toast } from "sonner";
 import { customerSchema } from "@/lib/validations";
 import { z } from "zod";
@@ -21,6 +21,10 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { CepInput } from "@/components/ui/cep-input";
 import { cleanCpf, cleanPhone, cleanCep } from "@/lib/utils";
 
+/**
+ * Página Clientes com filtros padronizados e grade responsiva 12-colunas.
+ * EN: Customers page with standardized filter labels and 12-column responsive grid.
+ */
 const Customers = () => {
   const navigate = useNavigate();
   const { organizationId, loading: orgLoading } = useOrganization();
@@ -330,17 +334,26 @@ const Customers = () => {
           activeFiltersCount={activeFiltersCount}
           resultsCount={filteredCustomers.length}
           totalCount={customers.length}
+          gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4"
         >
-          <SearchInput
-            value={filters.search}
-            onChange={(value) => setFilters({ ...filters, search: value })}
-            placeholder="Buscar por nome, email, telefone ou cidade..."
-          />
-          <MonthFilter
-            value={filters.birthMonth}
-            onChange={(value) => setFilters({ ...filters, birthMonth: value })}
-          />
-          <div className="space-y-2">
+          <div className="lg:col-span-4 space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Buscar
+            </Label>
+            <SearchInput
+              value={filters.search}
+              onChange={(value) => setFilters({ ...filters, search: value })}
+              placeholder="Buscar por nome, email, telefone ou cidade..."
+            />
+          </div>
+          <div className="lg:col-span-4">
+            <MonthFilter
+              value={filters.birthMonth}
+              onChange={(value) => setFilters({ ...filters, birthMonth: value })}
+            />
+          </div>
+          <div className="lg:col-span-4 space-y-2">
             <Label className="text-sm font-medium">Cidade</Label>
             <Select value={filters.city} onValueChange={(value) => setFilters({ ...filters, city: value })}>
               <SelectTrigger>
