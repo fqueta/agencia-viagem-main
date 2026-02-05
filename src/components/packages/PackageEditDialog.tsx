@@ -10,7 +10,7 @@ import { packageSchema } from "@/lib/validations";
 import { z } from "zod";
 import { useOrganization } from "@/hooks/useOrganization";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { cleanCurrency, formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 interface PackageEditDialogProps {
   package: any;
@@ -66,7 +66,7 @@ const PackageEditDialog = ({ package: pkg, open, onOpenChange, onPackageUpdated 
           name: validatedData.name,
           destination: validatedData.destination,
           duration_days: parseInt(validatedData.duration_days),
-          price: cleanCurrency(validatedData.price),
+          price: parseFloat(validatedData.price),
           available_spots: parseInt(validatedData.available_spots),
           description: validatedData.description || null,
         })

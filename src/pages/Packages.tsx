@@ -98,7 +98,7 @@ const Packages = () => {
         name: validatedData.name,
         destination: validatedData.destination,
         duration_days: parseInt(validatedData.duration_days),
-        price: cleanCurrency(validatedData.price),
+        price: parseFloat(validatedData.price),
         available_spots: parseInt(validatedData.available_spots),
         ...(validatedData.description && { description: validatedData.description }),
         organization_id: organizationId,

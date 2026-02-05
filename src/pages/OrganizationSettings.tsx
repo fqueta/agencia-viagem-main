@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Building2, UserPlus, Trash2, Shield, Eye, Crown } from "lucide-react";
+import { ArrowLeft, Building2, UserPlus, Trash2, Shield, Eye, Crown, Pencil, X, Check, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import {
@@ -88,6 +88,15 @@ export default function OrganizationSettings() {
   const [inviteRole, setInviteRole] = useState("agent");
   const [inviting, setInviting] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  
+  // Estados para edição
+  const [isEditing, setIsEditing] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    cnpj: "",
+  });
 
   useEffect(() => {
     if (organizationId) {
@@ -97,6 +106,16 @@ export default function OrganizationSettings() {
       loadUserRole();
     }
   }, [organizationId]);
+
+  useEffect(() => {
+    if (organization) {
+      setEditForm({
+        name: organization.name || "",
+        email: organization.email || "",
+        cnpj: organization.cnpj || "",
+      });
+    }
+  }, [organization]);
 
   /**
    * Carrega dados da organização atual.
@@ -178,6 +197,35 @@ export default function OrganizationSettings() {
 
     if (data) {
       setUserRole(data.role);
+    }
+  };
+
+  const handleSaveOrganization = async () => {
+    if (!organizationId) return;
+    setEditLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from("organizations")
+        .update({
+          name: editForm.name,
+          email: editForm.email,
+          cnpj: editForm.cnpj || null,
+        })
+        .eq("id", organizationId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Organização atualizada com sucesso!");
+      setIsEditing(false);
+      loadOrganization();
+    } catch (error) {
+      console.error("Erro ao atualizar organização:", error);
+      toast.error("Erro ao atualizar organização");
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -331,25 +379,58 @@ export default function OrganizationSettings() {
         {/* Informações da Organização */}
         <Card>
           <CardHeader>
-            <CardTitle>Informações da Organização</CardTitle>
-            <CardDescription>Detalhes da sua organização</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Informações da Organização</CardTitle>
+                <CardDescription>Detalhes da sua organização</CardDescription>
+              </div>
+              {isAdmin && !isEditing && (
+                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Editar
+                </Button>
+              )}
+              {isEditing && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={editLoading}>
+                    <X className="w-4 h-4 mr-2" />
+                    Cancelar
+                  </Button>
+                  <Button size="sm" onClick={handleSaveOrganization} disabled={editLoading}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Salvar
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Nome</Label>
-                <Input value={organization.name} disabled />
+                <Input 
+                  value={isEditing ? editForm.name : organization.name} 
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  disabled={!isEditing || editLoading} 
+                />
               </div>
               <div>
                 <Label>Email</Label>
-                <Input value={organization.email} disabled />
+                <Input 
+                  value={isEditing ? editForm.email : organization.email} 
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  disabled={!isEditing || editLoading} 
+                />
               </div>
-              {organization.cnpj && (
-                <div>
-                  <Label>CNPJ</Label>
-                  <Input value={organization.cnpj} disabled />
-                </div>
-              )}
+              <div>
+                <Label>CNPJ</Label>
+                <Input 
+                  value={isEditing ? editForm.cnpj : (organization.cnpj || "")} 
+                  onChange={(e) => setEditForm({ ...editForm, cnpj: e.target.value })}
+                  disabled={!isEditing || editLoading} 
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
               <div>
                 <Label>Limite de Usuários</Label>
                 <Input value={`${members.length} / ${organization.max_users}`} disabled />
