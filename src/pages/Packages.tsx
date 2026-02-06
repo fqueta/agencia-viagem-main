@@ -154,7 +154,7 @@ const Packages = () => {
             <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <div className="w-10 h-10 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
               <Plane className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -164,7 +164,7 @@ const Packages = () => {
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button variant="gradient">
+              <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Pacote
               </Button>
@@ -235,7 +235,7 @@ const Packages = () => {
                     />
                   </div>
                 </div>
-                <Button type="submit" className="w-full" disabled={loading || orgLoading} variant="gradient">
+                <Button type="submit" className="w-full" disabled={loading || orgLoading}>
                   {loading ? "Criando..." : "Criar Pacote"}
                 </Button>
               </form>

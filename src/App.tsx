@@ -26,6 +26,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 import UsersManagement from "./pages/admin/UsersManagement";
 import OrganizationsManagement from "./pages/admin/OrganizationsManagement";
 import OrganizationDetails from "./pages/admin/OrganizationDetails";
+import OrganizationEdit from "./pages/admin/OrganizationEdit";
 import UserEdit from "./pages/admin/UserEdit";
 import Profile from "./pages/Profile";
 import WaitingApproval from "./pages/WaitingApproval";
@@ -33,12 +34,15 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+import { OrganizationTheme } from "./components/organization/OrganizationTheme";
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <OrganizationTheme />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
@@ -71,6 +75,7 @@ const App = () => (
           <Route path="/admin/users/:id/edit" element={<MainLayout><ProtectedRoute><UserEdit /></ProtectedRoute></MainLayout>} />
           <Route path="/admin/organizations" element={<MainLayout><ProtectedRoute><OrganizationsManagement /></ProtectedRoute></MainLayout>} />
           <Route path="/admin/organizations/:id" element={<MainLayout><ProtectedRoute><OrganizationDetails /></ProtectedRoute></MainLayout>} />
+          <Route path="/admin/organizations/:id/edit" element={<MainLayout><ProtectedRoute><OrganizationEdit /></ProtectedRoute></MainLayout>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

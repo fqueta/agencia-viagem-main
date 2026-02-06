@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Building2, UserPlus, Trash2, Shield, Eye, Crown, Pencil, X, Check, Save } from "lucide-react";
+import { ArrowLeft, Building2, UserPlus, Trash2, Shield, Eye, Crown, Pencil, X, Check, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import {
@@ -44,6 +44,10 @@ interface Organization {
   email: string;
   cnpj?: string;
   max_users: number;
+  logo_url?: string;
+  primary_color?: string;
+  secondary_color?: string;
+  tertiary_color?: string;
 }
 
 interface Member {
@@ -96,7 +100,12 @@ export default function OrganizationSettings() {
     name: "",
     email: "",
     cnpj: "",
+    primary_color: "",
+    secondary_color: "",
+    tertiary_color: "",
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (organizationId) {
@@ -113,9 +122,25 @@ export default function OrganizationSettings() {
         name: organization.name || "",
         email: organization.email || "",
         cnpj: organization.cnpj || "",
+        primary_color: organization.primary_color || "#2563eb",
+        secondary_color: organization.secondary_color || "#1e40af",
+        tertiary_color: organization.tertiary_color || "#f59e0b",
       });
+      setLogoPreview(organization.logo_url || null);
     }
   }, [organization]);
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   /**
    * Carrega dados da organização atual.
@@ -205,12 +230,39 @@ export default function OrganizationSettings() {
     setEditLoading(true);
 
     try {
+      let logoUrl = organization?.logo_url;
+
+      if (logoFile) {
+        const fileExt = logoFile.name.split('.').pop();
+        const filePath = `${organizationId}/logo.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('organization-assets')
+          .upload(filePath, logoFile, {
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error('Error uploading logo:', uploadError);
+          toast.error("Erro ao fazer upload da logo.");
+        } else {
+          const { data: { publicUrl } } = supabase.storage
+            .from('organization-assets')
+            .getPublicUrl(filePath);
+          logoUrl = publicUrl;
+        }
+      }
+
       const { error } = await supabase
         .from("organizations")
         .update({
           name: editForm.name,
           email: editForm.email,
           cnpj: editForm.cnpj || null,
+          logo_url: logoUrl,
+          primary_color: editForm.primary_color,
+          secondary_color: editForm.secondary_color,
+          tertiary_color: editForm.tertiary_color,
         })
         .eq("id", organizationId);
 
@@ -434,6 +486,100 @@ export default function OrganizationSettings() {
               <div>
                 <Label>Limite de Usuários</Label>
                 <Input value={`${members.length} / ${organization.max_users}`} disabled />
+              </div>
+
+              <div className="col-span-2 space-y-4 pt-4 border-t">
+                <h3 className="font-medium">Personalização</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Logo da Organização</Label>
+                    <div className="flex items-center gap-4">
+                      {logoPreview ? (
+                        <div className="relative w-16 h-16 border rounded bg-muted flex items-center justify-center overflow-hidden">
+                          <img src={logoPreview} alt="Logo Preview" className="max-w-full max-h-full object-contain" />
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 border rounded bg-muted flex items-center justify-center">
+                          <Building2 className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                      )}
+                      {isEditing && (
+                        <div className="flex-1">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoChange}
+                            disabled={editLoading}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Recomendado: PNG ou JPG, máx 2MB
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Cor Primária</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="color"
+                          value={isEditing ? editForm.primary_color : (organization.primary_color || "#2563eb")}
+                          onChange={(e) => setEditForm({ ...editForm, primary_color: e.target.value })}
+                          disabled={!isEditing || editLoading}
+                          className="w-12 h-10 p-1 cursor-pointer"
+                        />
+                        <Input
+                          value={isEditing ? editForm.primary_color : (organization.primary_color || "#2563eb")}
+                          onChange={(e) => setEditForm({ ...editForm, primary_color: e.target.value })}
+                          disabled={!isEditing || editLoading}
+                          placeholder="#000000"
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cor Secundária</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="color"
+                          value={isEditing ? editForm.secondary_color : (organization.secondary_color || "#1e40af")}
+                          onChange={(e) => setEditForm({ ...editForm, secondary_color: e.target.value })}
+                          disabled={!isEditing || editLoading}
+                          className="w-12 h-10 p-1 cursor-pointer"
+                        />
+                        <Input
+                          value={isEditing ? editForm.secondary_color : (organization.secondary_color || "#1e40af")}
+                          onChange={(e) => setEditForm({ ...editForm, secondary_color: e.target.value })}
+                          disabled={!isEditing || editLoading}
+                          placeholder="#000000"
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <Label>Cor Terciária / Hover (Destaque)</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="color"
+                          value={isEditing ? editForm.tertiary_color : (organization.tertiary_color || "#f59e0b")}
+                          onChange={(e) => setEditForm({ ...editForm, tertiary_color: e.target.value })}
+                          disabled={!isEditing || editLoading}
+                          className="w-12 h-10 p-1 cursor-pointer"
+                        />
+                        <Input
+                          value={isEditing ? editForm.tertiary_color : (organization.tertiary_color || "#f59e0b")}
+                          onChange={(e) => setEditForm({ ...editForm, tertiary_color: e.target.value })}
+                          disabled={!isEditing || editLoading}
+                          placeholder="#000000"
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Building2, Search, Eye } from "lucide-react";
+import { ArrowLeft, Building2, Search, Eye, Pencil } from "lucide-react";
 
 interface Organization {
   id: string;
@@ -174,14 +174,24 @@ export default function OrganizationsManagement() {
                       </TableCell>
                       <TableCell>{new Date(org.created_at).toLocaleDateString("pt-BR")}</TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/admin/organizations/${org.id}`)}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          Ver Detalhes
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/admin/organizations/${org.id}/edit`)}
+                          >
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Editar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/admin/organizations/${org.id}`)}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            Detalhes
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -1,5 +1,8 @@
 import { Home, Package, Users, ShoppingCart, DollarSign, Calendar, AlertTriangle, Building2, UserCog, Settings, UserCircle } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +54,21 @@ export function AppSidebar() {
   const location = useLocation();
   const { isSystemAdmin } = useSystemAdmin();
   const { isOrgAdmin } = useOrganizationRole();
+  const { organizationId } = useOrganization();
+
+  const { data: organization } = useQuery({
+    queryKey: ['organization-sidebar', organizationId],
+    queryFn: async () => {
+      if (!organizationId) return null;
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('name, logo_url')
+        .eq('id', organizationId)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!organizationId
+  });
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -60,8 +78,14 @@ export function AppSidebar() {
         {state === "expanded" && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-full" />
-              <span className="font-bold text-foreground">TravelManager</span>
+              {organization?.logo_url ? (
+                <img src={organization.logo_url} alt="Logo" className="w-8 h-8 rounded-full object-cover" />
+              ) : (
+                <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-full" />
+              )}
+              <span className="font-bold text-foreground truncate">
+                {organization?.name || "TravelManager"}
+              </span>
             </div>
             {isSystemAdmin && <AdminBadge />}
           </div>
