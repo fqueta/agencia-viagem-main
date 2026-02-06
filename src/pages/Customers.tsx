@@ -16,6 +16,8 @@ import { FilterBar } from "@/components/filters/FilterBar";
 import { SearchInput } from "@/components/filters/SearchInput";
 import { MonthFilter } from "@/components/filters/MonthFilter";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganizationRole } from "@/hooks/useOrganizationRole";
+import { CustomerDeleteDialog } from "@/components/customers/CustomerDeleteDialog";
 import { CpfInput } from "@/components/ui/cpf-input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { CepInput } from "@/components/ui/cep-input";
@@ -28,6 +30,7 @@ import { cleanCpf, cleanPhone, cleanCep } from "@/lib/utils";
 const Customers = () => {
   const navigate = useNavigate();
   const { organizationId, loading: orgLoading } = useOrganization();
+  const { isOrgAdmin } = useOrganizationRole();
   const [customers, setCustomers] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -416,6 +419,13 @@ const Customers = () => {
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
+                        {isOrgAdmin && (
+                          <CustomerDeleteDialog
+                            customerId={customer.id}
+                            customerName={customer.full_name}
+                            onSuccess={loadCustomers}
+                          />
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
